@@ -24,13 +24,13 @@ and how it deploys.
 ## Architecture
 
 ```
- Browser (public/)                Vercel serverless function        Anthropic API
-┌─────────────────────┐  POST    ┌──────────────────────────┐      ┌───────────┐
-│ index.html           │ ───────▶│ api/generate-guide.js     │─────▶│ Claude    │
-│ css/styles.css        │         │                           │      │ (Messages │
-│ js/app.js              │◀───────│  data/reference.js        │◀─────│  API)     │
-│ js/sector-data.js       │  JSON  │  data/fallback-guides.js  │ JSON │           │
-└─────────────────────┘         └──────────────────────────┘      └───────────┘
+   Browser (public/)              Vercel serverless function          Anthropic API
+  +------------------+   POST    +----------------------------+      +-----------+
+  | index.html       | --------> | api/generate-guide.js      | ---> | Claude    |
+  | css/styles.css    |          |                            |      | (Messages |
+  | js/app.js          | <------ | data/reference.js          | <--- |  API)     |
+  | js/sector-data.js   |  JSON  | data/fallback-guides.js    | JSON |           |
+  +------------------+          +----------------------------+      +-----------+
 ```
 
 - **Static frontend** (`public/`) — plain HTML/CSS/JS, no framework. A
