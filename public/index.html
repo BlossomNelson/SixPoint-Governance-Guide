@@ -1,0 +1,143 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>SixPoint — AI Governance Guide Generator</title>
+  <meta
+    name="description"
+    content="Generate a short, plain-language AI governance guide for your business sector, grounded in GDPR and the EU AI Act."
+  />
+
+  <!-- Inter for body text, IBM Plex Mono for small labels and citations (see styles.css) -->
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+  <link
+    href="https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@500;600&family=Inter:wght@400;500;600;700&display=swap"
+    rel="stylesheet"
+  />
+
+  <link rel="stylesheet" href="/css/styles.css" />
+</head>
+<body>
+  <header class="site-header">
+    <div class="container header-inner">
+      <span class="eyebrow">SixPoint</span>
+      <span class="header-tagline">AI Governance Guide Generator for SMEs</span>
+    </div>
+  </header>
+
+  <main class="container">
+    <!-- ================= LANDING ================= -->
+    <section id="view-landing" class="view">
+      <div class="hero">
+        <span class="eyebrow">Six interventions. Six sectors. One plain-language guide.</span>
+        <h1>An AI governance guide, built for your business in under a minute.</h1>
+        <p class="lede">
+          Pick your sector and a language. SixPoint generates a short, practical
+          governance guide covering six concrete steps for using AI-powered CRM
+          tools responsibly — each one grounded in a specific GDPR or EU AI Act
+          article, not general advice.
+        </p>
+        <div class="hero-actions">
+          <button id="start-btn" class="btn-primary" type="button">Build your guide</button>
+          <span class="small mono" style="color: var(--color-ink-soft)">~60 seconds, no signup</span>
+        </div>
+      </div>
+
+      <div class="how-it-works">
+        <h2>How it works</h2>
+        <ol>
+          <li>Choose your sector and the language for your guide.</li>
+          <li>SixPoint tells you whether your sector is standard or higher-stakes under the AI Act, and why.</li>
+          <li>You get all six governance interventions, each with a citation, a flag, and a suggested practice.</li>
+          <li>A ready-to-paste disclosure sentence for your own website or terms.</li>
+          <li>Download the whole thing as a text file.</li>
+        </ol>
+      </div>
+    </section>
+
+    <!-- ================= PICKER ================= -->
+    <section id="view-picker" class="view" hidden>
+      <span class="step-label">Step 1 of 2</span>
+      <h2>Choose your sector</h2>
+      <p>Two sectors carry extra weight under the EU AI Act and GDPR — SixPoint will explain why if yours does.</p>
+      <div class="sector-grid" id="sector-grid" role="group" aria-label="Choose your business sector"></div>
+
+      <span class="step-label">Step 2 of 2</span>
+      <h2>Choose a language</h2>
+      <p>Citations always stay in their original legal form, in every language.</p>
+      <div class="lang-grid" id="lang-grid" role="group" aria-label="Choose a language"></div>
+
+      <div class="picker-actions">
+        <button id="generate-btn" class="btn-primary" type="button" disabled>Generate my guide</button>
+        <button id="back-to-landing" class="btn-link" type="button">← Back</button>
+      </div>
+    </section>
+
+    <!-- ================= LOADING ================= -->
+    <section id="view-loading" class="view loading-view" hidden aria-live="polite">
+      <div class="spinner" aria-hidden="true"></div>
+      <p>Generating your guide…</p>
+    </section>
+
+    <!-- ================= ERROR ================= -->
+    <section id="view-error" class="view error-view" hidden>
+      <h2>Something went wrong</h2>
+      <p id="error-message">Please try again.</p>
+      <button id="retry-btn" class="btn-primary" type="button">Try again</button>
+    </section>
+
+    <!-- ================= RESULTS ================= -->
+    <section id="view-results" class="view" hidden>
+      <div id="fallback-banner" class="fallback-banner" hidden>
+        <strong>Showing a cached version.</strong>
+        <span id="fallback-note-text"></span>
+      </div>
+
+      <div class="stakes-block">
+        <span id="stakes-tier-badge" class="stakes-tier-badge mono"></span>
+        <h2 id="stakes-heading"></h2>
+        <p id="stakes-explanation"></p>
+
+        <h3>Risks worth watching for</h3>
+        <ul id="sector-risks" class="risk-list"></ul>
+      </div>
+
+      <div class="interventions-block">
+        <span class="step-label">Your governance guide</span>
+        <h2>Six interventions</h2>
+        <ol id="interventions-list" style="list-style: none; padding: 0; margin: 16px 0 0;"></ol>
+      </div>
+
+      <div class="tell-customers-block">
+        <h2>Tell your customers</h2>
+        <p>A ready-to-paste sentence for your website or terms of service:</p>
+        <div class="tell-customers-box">
+          <blockquote id="tell-customers-text"></blockquote>
+          <button id="copy-tell-customers" class="btn-secondary" type="button">Copy sentence</button>
+        </div>
+      </div>
+
+      <div class="disclaimer-block">
+        <p id="disclaimer-text" class="small mono"></p>
+      </div>
+
+      <div class="actions-block">
+        <button id="download-btn" class="btn-primary" type="button">Download as text</button>
+        <button id="restart-btn" class="btn-link" type="button">Start a new guide</button>
+      </div>
+    </section>
+  </main>
+
+  <footer class="site-footer">
+    <div class="container">
+      SixPoint is a practical deliverable for an MSc thesis on AI governance tooling for SMEs.
+      Guides are a starting point, not legal advice, an audit, or a certification of compliance.
+    </div>
+  </footer>
+
+  <script src="/js/sector-data.js"></script>
+  <script src="/js/app.js"></script>
+</body>
+</html>
