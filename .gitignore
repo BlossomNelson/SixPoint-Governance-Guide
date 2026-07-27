@@ -1,0 +1,15 @@
+# Dependencies
+node_modules/
+
+# Environment variables -- the real API key must never be committed
+.env
+.env.local
+.env.*.local
+
+# Vercel
+.vercel
+
+# OS / editor noise
+.DS_Store
+*.log
+npm-debug.log*

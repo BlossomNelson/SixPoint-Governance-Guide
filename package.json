@@ -1,0 +1,12 @@
+{
+  "name": "sixpoint-governance-guide",
+  "version": "1.0.0",
+  "private": true,
+  "description": "AI Governance Guide Generator for SMEs using AI-powered CRM tools (MSc thesis practical deliverable).",
+  "engines": {
+    "node": ">=18"
+  },
+  "dependencies": {
+    "@anthropic-ai/sdk": "^0.115.0"
+  }
+}
