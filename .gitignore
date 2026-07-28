@@ -1,7 +1,7 @@
 # Dependencies
 node_modules/
 
-# Environment variables -- the real API key must never be committed
+# Environment variables: the real API key must never be committed
 .env
 .env.local
 .env.*.local
