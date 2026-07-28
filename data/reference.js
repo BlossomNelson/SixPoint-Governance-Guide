@@ -133,14 +133,19 @@ const INTERVENTIONS = [
 ];
 
 // GDPR Article 22 caveat: must appear in EVERY guide, in every sector,
-// regardless of stakes tier, as one short, plain, unelaborated sentence.
-// Fixed and code-assembled rather than asked of the model, specifically
-// so nothing can add extra sentences or sector-specific elaboration to
-// it: there is no generation step for this field to drift in.
+// regardless of stakes tier, as one short, plain, unelaborated sentence
+// addressed directly to the reader. Fixed and code-assembled rather
+// than asked of the model, specifically so nothing can add extra
+// sentences or sector-specific elaboration to it: there is no
+// generation step for this field to drift in. Rendered quietly (small,
+// italic) at the bottom of the stakes screen, the same visual weight
+// as the closing disclaimer, not as a prominent callout: it's a
+// caveat that applies regardless of what the rest of the screen says,
+// not a headline finding.
 const ARTICLE_22_CAVEAT = {
   citation: "GDPR Art. 22",
   text:
-    "Any sector can still trigger GDPR Art. 22 if a specific AI feature makes a significant automated decision about a customer.",
+    "This still applies to your business if a specific AI feature makes a significant automated decision about a customer, regardless of your stakes tier above.",
 };
 
 // The closing "tell your customers" advice. Deliberately not a sentence
