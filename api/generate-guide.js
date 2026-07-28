@@ -88,10 +88,12 @@ You are not being asked to recall or interpret GDPR or the EU AI Act from your o
 TARGET SECTOR: ${sector.label}
 STAKES TIER: ${sector.stakesTier} (${stakesGrounding})
 
+This guide is meant to be read in under a minute, not studied. Every field below should be as short as it can be while still being specific to ${sector.label}: a plain phrase beats a full explanation, and a short sentence beats two.
+
 OUTPUT FIELDS:
 - stakesHeading: a short heading naming the stakes tier and why, specific to ${sector.label}
-- stakesExplanation: 1-2 sentences giving the sector's own stakes rationale (do not mention Article 22 or automated decision-making generally, that is covered elsewhere in the guide)
-- sectorRisks: 2-3 concrete, sector-specific risks a real ${sector.label} SME using an AI CRM tool could plausibly face, consistent with the six fixed interventions described above
+- stakesExplanation: exactly 1 sentence giving the sector's own stakes rationale (do not mention Article 22 or automated decision-making generally, that is covered elsewhere in the guide)
+- sectorRisks: 2-3 sector-specific risks a real ${sector.label} SME using an AI CRM tool could plausibly face, consistent with the six fixed interventions described above. Each one is a short bullet point, roughly 6-12 words, not a full explanatory sentence: name the risk plainly and stop. For example, "Chatbots can retain full conversation logs indefinitely." rather than "Support or in-app chatbots can retain full conversation logs, including anything a customer typed, for longer than anyone intended."
 
 Respond only with the structured JSON output. Do not add commentary outside the schema.`;
 }
