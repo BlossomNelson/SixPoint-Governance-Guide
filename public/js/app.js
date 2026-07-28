@@ -128,9 +128,12 @@
     document.getElementById("stakes-heading").textContent = guide.stakesHeading;
     document.getElementById("stakes-explanation").textContent = guide.stakesExplanation;
 
+    // Quiet note, not a callout: citation folded into the same small
+    // italic sentence rather than shown as its own badge, so it reads
+    // at the same visual weight as the closing disclaimer.
     if (guide.article22Caveat) {
-      document.getElementById("caveat-text").textContent = guide.article22Caveat.text;
-      document.getElementById("caveat-citation").textContent = guide.article22Caveat.citation;
+      document.getElementById("caveat-text").textContent =
+        `${guide.article22Caveat.text} (${guide.article22Caveat.citation})`;
     }
 
     const risksList = document.getElementById("sector-risks");
@@ -195,13 +198,13 @@
     lines.push("");
     lines.push(guide.stakesHeading);
     lines.push(guide.stakesExplanation);
+    lines.push("");
+    lines.push("RISKS TO WATCH FOR");
+    (guide.sectorRisks || []).forEach((r) => lines.push(`- ${r}`));
     if (guide.article22Caveat) {
       lines.push("");
       lines.push(`${guide.article22Caveat.text} (${guide.article22Caveat.citation})`);
     }
-    lines.push("");
-    lines.push("RISKS TO WATCH FOR");
-    (guide.sectorRisks || []).forEach((r) => lines.push(`- ${r}`));
     lines.push("");
     lines.push("SIX GOVERNANCE INTERVENTIONS");
     (guide.interventions || []).forEach((item, i) => {
