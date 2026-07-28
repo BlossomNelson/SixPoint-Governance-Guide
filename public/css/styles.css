@@ -3,10 +3,15 @@
    Design direction: clean, editorial, trustworthy -- not a generic
    SaaS look. Off-white background, near-black text, a single
    confident accent used sparingly (eyebrow labels, CTAs, citation
-   badges), not as a background colour anywhere. Inter for body text,
-   IBM Plex Mono for small labels and citations -- the mono font is
-   doing a specific job: it signals "this is a precise, checkable
-   fact" (a citation, a flag) versus prose.
+   badges), not as a background colour anywhere.
+
+   Type pairing is doing three distinct jobs, not just decoration:
+   Fraunces (serif) on headlines gives the page a confident, editorial
+   voice instead of a generic SaaS one; Inter carries body text because
+   it stays quiet and readable at small sizes; IBM Plex Mono is
+   reserved for legal citations and small structural labels, so a
+   citation visually reads as "a precise, checkable fact," distinct
+   from the surrounding prose, wherever it appears.
    ------------------------------------------------------------------ */
 
 :root {
@@ -20,6 +25,7 @@
   --color-higher: #e8471f;
   --color-standard: #17140f;
 
+  --font-serif: "Fraunces", ui-serif, Georgia, serif;
   --font-body: "Inter", -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
   --font-mono: "IBM Plex Mono", ui-monospace, "SFMono-Regular", Menlo, monospace;
 
@@ -28,6 +34,12 @@
   --max-width: 760px;
 
   --shadow-card: 0 1px 2px rgba(23, 20, 15, 0.06);
+
+  /* One easing curve, used everywhere transitions happen, so motion
+     feels like a single considered decision rather than several. A
+     gentle ease-out: quick to start, soft to settle -- understated,
+     not springy. */
+  --ease-standard: cubic-bezier(0.22, 0.61, 0.36, 1);
 }
 
 * {
@@ -97,14 +109,18 @@ main {
   padding: 56px 0 96px;
 }
 
+/* Screen-to-screen transition (picker -> stakes -> guide, and every
+   other view change): a short, soft fade with a small rise. Subtle on
+   purpose -- long enough to read as intentional, short enough to
+   never feel like a wait. */
 .view {
-  animation: fade-in 240ms ease-out;
+  animation: fade-in 340ms var(--ease-standard);
 }
 
 @keyframes fade-in {
   from {
     opacity: 0;
-    transform: translateY(4px);
+    transform: translateY(10px);
   }
   to {
     opacity: 1;
@@ -118,6 +134,13 @@ main {
 
 /* ---------- Typography ---------- */
 
+h1,
+h2,
+h3 {
+  font-family: var(--font-serif);
+  font-weight: 600;
+}
+
 h1 {
   font-size: clamp(2rem, 4vw, 2.75rem);
   line-height: 1.1;
@@ -126,13 +149,13 @@ h1 {
 }
 
 h2 {
-  font-size: 1.4rem;
+  font-size: 1.45rem;
   line-height: 1.25;
   margin: 0 0 12px;
 }
 
 h3 {
-  font-size: 1.05rem;
+  font-size: 1.1rem;
   margin: 0 0 8px;
 }
 
@@ -165,7 +188,8 @@ p {
   font-weight: 600;
   cursor: pointer;
   border-radius: var(--radius-sm);
-  transition: transform 120ms ease, background-color 120ms ease, opacity 120ms ease;
+  transition: transform 180ms var(--ease-standard), background-color 180ms var(--ease-standard),
+    border-color 180ms var(--ease-standard), box-shadow 180ms var(--ease-standard), opacity 180ms var(--ease-standard);
 }
 
 .btn-primary {
@@ -177,12 +201,19 @@ p {
 
 .btn-primary:hover:not(:disabled) {
   transform: translateY(-1px);
+  box-shadow: 0 4px 14px rgba(232, 71, 31, 0.25);
+}
+
+.btn-primary:active:not(:disabled) {
+  transform: translateY(0);
+  box-shadow: none;
 }
 
 .btn-primary:disabled {
   opacity: 0.4;
   cursor: not-allowed;
   transform: none;
+  box-shadow: none;
 }
 
 .btn-secondary {
@@ -194,6 +225,7 @@ p {
 
 .btn-secondary:hover {
   border-color: var(--color-ink);
+  transform: translateY(-1px);
 }
 
 .btn-link {
@@ -221,22 +253,6 @@ p {
   gap: 16px;
   align-items: center;
   flex-wrap: wrap;
-}
-
-.how-it-works {
-  margin-top: 64px;
-  border-top: 1px solid var(--color-border);
-  padding-top: 40px;
-}
-
-.how-it-works ol {
-  margin: 0;
-  padding-left: 20px;
-  color: var(--color-ink-soft);
-}
-
-.how-it-works li {
-  margin-bottom: 10px;
 }
 
 /* ---------- Picker ---------- */
@@ -272,7 +288,8 @@ p {
   padding: 16px;
   cursor: pointer;
   box-shadow: var(--shadow-card);
-  transition: border-color 120ms ease, transform 120ms ease;
+  transition: border-color 180ms var(--ease-standard), transform 180ms var(--ease-standard),
+    box-shadow 180ms var(--ease-standard);
   display: flex;
   flex-direction: column;
   gap: 6px;
@@ -280,6 +297,8 @@ p {
 
 .sector-card:hover {
   border-color: var(--color-ink);
+  transform: translateY(-2px);
+  box-shadow: 0 6px 16px rgba(23, 20, 15, 0.08);
 }
 
 .sector-card.selected {
@@ -291,18 +310,6 @@ p {
 .sector-card-label {
   font-weight: 600;
   font-size: 0.95rem;
-}
-
-.sector-card-tier {
-  font-family: var(--font-mono);
-  font-size: 10.5px;
-  letter-spacing: 0.08em;
-  text-transform: uppercase;
-  color: var(--color-ink-soft);
-}
-
-.sector-card.selected .sector-card-tier.tier-higher {
-  color: var(--color-accent);
 }
 
 .lang-grid {
@@ -319,18 +326,19 @@ p {
   padding: 8px 18px;
   font-size: 0.9rem;
   cursor: pointer;
-  transition: border-color 120ms ease;
+  transition: border-color 180ms var(--ease-standard), background-color 180ms var(--ease-standard),
+    color 180ms var(--ease-standard), transform 180ms var(--ease-standard);
 }
 
 .lang-chip:hover {
   border-color: var(--color-ink);
+  transform: translateY(-1px);
 }
 
 .lang-chip.selected {
-  border-color: var(--color-accent);
+  border-color: var(--color-ink);
   background: var(--color-ink);
   color: #fff;
-  border-color: var(--color-ink);
 }
 
 .picker-actions {
@@ -517,9 +525,12 @@ p {
 
 .tell-customers-box blockquote {
   margin: 0 0 14px;
-  font-size: 1rem;
-  color: var(--color-ink);
+  font-family: var(--font-serif);
+  font-size: 1.15rem;
   font-style: italic;
+  font-weight: 500;
+  color: var(--color-ink);
+  line-height: 1.4;
 }
 
 /* ---------- Disclaimer / actions ---------- */
@@ -554,9 +565,17 @@ p {
 
 .site-footer {
   border-top: 1px solid var(--color-border);
-  padding: 28px 0;
+  padding: 20px 0;
+}
+
+/* A quiet disclaimer, not a headline: small, italic, muted -- read as
+   a footnote, not a page element competing with the actual content. */
+.footer-disclaimer {
+  margin: 0;
   color: var(--color-ink-soft);
-  font-size: 0.82rem;
+  font-size: 0.8rem;
+  font-style: italic;
+  max-width: none;
 }
 
 /* ---------- Responsive ---------- */
@@ -587,7 +606,10 @@ p {
 @media (prefers-reduced-motion: reduce) {
   .view,
   .spinner,
-  .btn-primary {
+  .btn-primary,
+  .btn-secondary,
+  .sector-card,
+  .lang-chip {
     animation: none !important;
     transition: none !important;
   }
