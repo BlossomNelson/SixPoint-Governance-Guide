@@ -3,17 +3,19 @@
 <head>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-  <title>SixPoint — AI Governance Guide Generator</title>
+  <title>SixPoint: AI Governance Guide Generator</title>
   <meta
     name="description"
-    content="Generate a short, plain-language AI governance guide for your business sector, grounded in GDPR and the EU AI Act."
+    content="Pick your sector and language. Get a short AI governance guide, grounded in GDPR and the EU AI Act."
   />
 
-  <!-- Inter for body text, IBM Plex Mono for small labels and citations (see styles.css) -->
+  <!-- Fraunces (serif) for headlines, Inter for body text, IBM Plex Mono for
+       small labels and legal citations specifically -- so a citation reads
+       as a citation, not as prose (see styles.css). -->
   <link rel="preconnect" href="https://fonts.googleapis.com" />
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
   <link
-    href="https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@500;600&family=Inter:wght@400;500;600;700&display=swap"
+    href="https://fonts.googleapis.com/css2?family=Fraunces:ital,wght@0,500;0,600;1,500&family=IBM+Plex+Mono:wght@500;600&family=Inter:wght@400;500;600;700&display=swap"
     rel="stylesheet"
   />
 
@@ -31,29 +33,13 @@
     <!-- ================= LANDING ================= -->
     <section id="view-landing" class="view">
       <div class="hero">
-        <span class="eyebrow">Six interventions. Six sectors. One plain-language guide.</span>
-        <h1>An AI governance guide, built for your business in under a minute.</h1>
+        <h1>Your AI governance guide, in under a minute.</h1>
         <p class="lede">
-          Pick your sector and a language. SixPoint generates a short, practical
-          governance guide covering six concrete steps for using AI-powered CRM
-          tools responsibly — each one grounded in a specific GDPR or EU AI Act
-          article, not general advice.
+          Pick your sector and language. Get a short governance guide, grounded in GDPR and the EU AI Act.
         </p>
         <div class="hero-actions">
           <button id="start-btn" class="btn-primary" type="button">Build your guide</button>
-          <span class="small mono" style="color: var(--color-ink-soft)">~60 seconds, no signup</span>
         </div>
-      </div>
-
-      <div class="how-it-works">
-        <h2>How it works</h2>
-        <ol>
-          <li>Choose your sector and the language for your guide.</li>
-          <li>SixPoint tells you whether your sector is standard or higher-stakes under the AI Act, and why.</li>
-          <li>You get all six governance interventions, each with a citation, a flag, and a suggested practice.</li>
-          <li>A ready-to-paste disclosure sentence for your own website or terms.</li>
-          <li>Download the whole thing as a text file.</li>
-        </ol>
       </div>
     </section>
 
@@ -61,7 +47,6 @@
     <section id="view-picker" class="view" hidden>
       <span class="step-label">Step 1 of 2</span>
       <h2>Choose your sector</h2>
-      <p>Two sectors carry extra weight under the EU AI Act and GDPR — SixPoint will explain why if yours does.</p>
       <div class="sector-grid" id="sector-grid" role="group" aria-label="Choose your business sector"></div>
 
       <span class="step-label">Step 2 of 2</span>
@@ -132,8 +117,9 @@
 
   <footer class="site-footer">
     <div class="container">
-      SixPoint is a practical deliverable for an MSc thesis on AI governance tooling for SMEs.
-      Guides are a starting point, not legal advice, an audit, or a certification of compliance.
+      <p class="footer-disclaimer">
+        Guides are a starting point, not legal advice, an audit, or a certification of compliance.
+      </p>
     </div>
   </footer>
 

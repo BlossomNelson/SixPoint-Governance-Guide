@@ -53,12 +53,10 @@
       btn.className = "sector-card";
       btn.dataset.sectorId = sector.id;
       btn.setAttribute("aria-pressed", "false");
-      btn.innerHTML = `
-        <span class="sector-card-label">${sector.label}</span>
-        <span class="sector-card-tier ${sector.stakesTier === "higher" ? "tier-higher" : ""}">${
-          sector.stakesTier === "higher" ? "Higher stakes" : "Standard"
-        }</span>
-      `;
+      // Stakes tier (higher/standard) is deliberately not shown here -- it
+      // only appears once a sector is picked and the guide is generated,
+      // so the picker itself stays neutral between sectors.
+      btn.innerHTML = `<span class="sector-card-label">${sector.label}</span>`;
       btn.addEventListener("click", () => {
         state.sectorId = sector.id;
         grid.querySelectorAll(".sector-card").forEach((c) => {
@@ -261,7 +259,7 @@
       // Clipboard API can be unavailable (older browsers, insecure
       // context); fail quietly rather than showing an error for a
       // convenience feature that isn't core to the guide itself.
-      btn.textContent = "Copy failed — select manually";
+      btn.textContent = "Copy failed, select manually";
     }
   }
 

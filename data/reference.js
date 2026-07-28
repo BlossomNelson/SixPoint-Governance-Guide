@@ -9,7 +9,7 @@
  * lives here, as plain data, checked against primary sources before
  * this file was written. api/generate-guide.js serializes this object
  * into the system prompt on *every* request, and instructs the model
- * that its job is translation and plain-language generation only —
+ * that its job is translation and plain-language generation only,
  * not legal interpretation. If a fact needs to change (e.g. a citation
  * is corrected), it changes here once, not inside a prompt string
  * buried in the function.
@@ -21,7 +21,7 @@
  */
 
 // The six sectors are a closed list by design (see spec: "no other option").
-// A fixed list keeps the sector-specific reasoning bounded and reviewable —
+// A fixed list keeps the sector-specific reasoning bounded and reviewable:
 // every possible input has been read and checked by a human, which would
 // not be true of a free-text sector field.
 const SECTORS = [
