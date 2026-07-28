@@ -525,11 +525,6 @@ p {
   border-top: 1px solid var(--color-border);
 }
 
-.disclaimer-block p {
-  color: var(--color-ink-soft);
-  max-width: none;
-}
-
 .actions-block {
   margin-top: 32px;
   display: flex;
@@ -545,15 +540,15 @@ p {
   text-align: center;
 }
 
-/* ---------- Footer ---------- */
-
-.site-footer {
-  border-top: 1px solid var(--color-border);
-  padding: 20px 0;
-}
+/* ---------- Disclaimer note ---------- */
 
 /* A quiet disclaimer, not a headline: small, italic, muted, read as
-   a footnote, not a page element competing with the actual content. */
+   a footnote, not a page element competing with the actual content.
+   Appears exactly once, on the guide screen, below the six
+   interventions, inside .disclaimer-block. There is no page-wide
+   footer: a disclaimer repeated on every screen reads as noise, and
+   risks being skimmed past everywhere rather than read once where it
+   matters. */
 .footer-disclaimer {
   margin: 0;
   color: var(--color-ink-soft);
