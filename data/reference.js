@@ -7,16 +7,23 @@
  * Claude is never asked to recall or interpret GDPR / EU AI Act content
  * from its own training data. Every legal fact that reaches the model
  * lives here, as plain data, checked against primary sources before
- * this file was written. api/generate-guide.js serializes this object
- * into the system prompt on *every* request, and instructs the model
- * that its job is translation and plain-language generation only,
- * not legal interpretation. If a fact needs to change (e.g. a citation
- * is corrected), it changes here once, not inside a prompt string
- * buried in the function.
+ * this file was written.
  *
- * This same object also drives the hardcoded fallback guides
+ * English only (no translation): everything in this file that is fixed,
+ * identical text regardless of sector (the six interventions, the
+ * Article 22 caveat, the customer notice, the disclaimer) is now
+ * assembled directly by api/generate-guide.js in code, not requested
+ * from the model at all. There is nothing left for the model to
+ * transform on that content, so asking it to reproduce fixed text
+ * verbatim would only add a chance of it drifting from the source with
+ * no upside. The model's role is now limited to the parts that are
+ * genuinely sector-specific and can't be pre-written: the stakes
+ * heading, the stakes explanation, and the sector risk examples.
+ *
+ * This same object also drives the hardcoded fallback content
  * (data/fallback-guides.js), so the "cached" and "live" paths are
- * guaranteed to cite the same six interventions.
+ * guaranteed to assemble identical fixed content around whatever
+ * sector-specific text either path supplies.
  * ------------------------------------------------------------------
  */
 
@@ -63,12 +70,13 @@ const SECTORS = [
   },
 ];
 
-// The six governance interventions. Content is fixed: the model may
-// translate it into the target language and adapt sentence structure,
-// but may not add, remove, or reinterpret the substance. Citations are
-// carried as a separate field specifically so the prompt can instruct
-// "never translate this field" without relying on the model to notice
-// a citation embedded in prose.
+// The six governance interventions. Fully fixed, code-assembled content:
+// title, body, suggestedPractice, and citation never vary by sector or
+// request. Only the flag (computed below from the sector's stakes tier)
+// changes. Suggested practices are written to name the concrete
+// regulatory mechanism they come from (a required contract term, a
+// named record, a deadline) rather than a generic reminder, so each one
+// is actionable on its own.
 const INTERVENTIONS = [
   {
     id: "vendor-responsibility",
@@ -76,7 +84,7 @@ const INTERVENTIONS = [
     body:
       "Check whether your vendor trains its AI on your data, shares it with others (including subprocessors), or keeps it for a set time. If undocumented, ask the vendor and treat the data as unprotected until you get an answer.",
     suggestedPractice:
-      "Put measures in place to secure customer data on your end.",
+      "Get a signed Data Processing Agreement from the vendor. GDPR Art. 28(3) requires one in writing, covering what the vendor does with your data, for how long, and who else can access it.",
     citation: "GDPR Art. 28",
   },
   {
@@ -84,7 +92,8 @@ const INTERVENTIONS = [
     title: "One record of your data",
     body:
       "Write down what customer data each AI feature uses, why, for how long, and who else can see it.",
-    suggestedPractice: "Keep this record current as features change.",
+    suggestedPractice:
+      "Keep a written Record of Processing Activities per GDPR Art. 30(1): purpose, data categories, recipients, and retention period for each AI feature. Update it the day a feature changes, not at the next audit.",
     citation: "GDPR Art. 30",
   },
   {
@@ -92,7 +101,7 @@ const INTERVENTIONS = [
     title: "What the default settings actually do",
     body: "Check for settings on by default and turn off what isn't needed.",
     suggestedPractice:
-      "Favour the stricter setting when unsure, check back periodically.",
+      "Apply data protection by design and by default, GDPR Art. 25: turn off any setting that shares, trains on, or retains more data than the feature needs, and re-check after every vendor update.",
     citation: "GDPR Art. 25",
   },
   {
@@ -100,7 +109,7 @@ const INTERVENTIONS = [
     title: "A human checks AI output before it reaches a customer",
     body: "Individually for anything significant, spot-checks otherwise.",
     suggestedPractice:
-      "Decide who reviews what and confirm it's actually happening.",
+      "Name a specific reviewer with real authority to change or block the AI's output, not just read it. EU AI Act Art. 14 requires a person able to intervene, not a rubber stamp.",
     citation: "EU AI Act Art. 14",
   },
   {
@@ -108,7 +117,8 @@ const INTERVENTIONS = [
     title: "Someone checks for patterns, not just single cases",
     body:
       "Periodically check whether the AI treats customer groups differently for no good reason.",
-    suggestedPractice: "Check regularly, not just reactively.",
+    suggestedPractice:
+      "Put a fairness check on the calendar, for example quarterly, comparing outcomes across customer groups. GDPR Art. 5(1)(a)'s fairness principle expects this to be routine, not something you only look at after a complaint.",
     citation: "GDPR Art. 5(1)(a)",
   },
   {
@@ -117,54 +127,69 @@ const INTERVENTIONS = [
     body:
       "Decide in advance who notices a problem, who acts, how customers are told, and how the 72-hour regulator notification deadline is met.",
     suggestedPractice:
-      "Agree the plan in advance, make sure people know it exists.",
+      "Name who assesses a suspected breach and who notifies the regulator inside GDPR Art. 33's 72-hour deadline. If the breach is high-risk to customers, Art. 34 separately requires telling them directly, so agree who does that too.",
     citation: "GDPR Art. 33-34",
   },
 ];
 
 // GDPR Article 22 caveat: must appear in EVERY guide, in every sector,
-// regardless of stakes tier. Kept as fixed English source text; the
-// model translates it, but the meaning and the citation are fixed here
-// so the "spell it out in plain terms" requirement can't be diluted by
-// the model paraphrasing the *legal substance*, only the language.
+// regardless of stakes tier, as one short, plain, unelaborated sentence.
+// Fixed and code-assembled rather than asked of the model, specifically
+// so nothing can add extra sentences or sector-specific elaboration to
+// it: there is no generation step for this field to drift in.
 const ARTICLE_22_CAVEAT = {
   citation: "GDPR Art. 22",
   text:
-    "Whatever your sector, if your CRM's AI ever makes a big decision about a customer on its own, like turning them down, blocking them, or scoring them in a way that affects what they get, the law says a person still has to be able to step in, explain why, and let the customer challenge it. This applies no matter your sector's stakes level above.",
+    "Any sector can still trigger GDPR Art. 22 if a specific AI feature makes a significant automated decision about a customer.",
 };
+
+// The closing "tell your customers" advice. Deliberately not a sentence
+// to copy and paste: it tells the SME what to do and why, in their own
+// words, rather than supplying exact wording. Fixed and code-assembled
+// for the same reason as the Article 22 caveat above.
+const CUSTOMER_NOTICE =
+  "Tell your customers that AI is being used with their data, for example in a privacy notice or your terms. This matters because customers have a right to know how their data is used, and trust breaks quickly if they find out from somewhere other than you.";
+
+// Closing disclaimer. Identical across every guide by design, so it is
+// fixed content rather than something asked of the model each time.
+const DISCLAIMER =
+  "This guide is a starting point for a conversation with your team and, where needed, a qualified advisor. It is not legal advice, not a compliance audit, and not a certification that your business meets any legal requirement.";
 
 // Flag logic is deterministic and computed in code, not left to the model:
 // higher-stakes sectors flag every intervention "non-negotiable", standard
-// sectors flag every intervention "worth doing" -- never optional, in either
+// sectors flag every intervention "worth doing", never optional, in either
 // tier. Keeping this as a pure function avoids the model ever deciding a
 // flag on its own.
 function flagForStakesTier(stakesTier) {
   return stakesTier === "higher" ? "non-negotiable" : "worth doing";
 }
 
-const LANGUAGES = [
-  { code: "en", label: "English" },
-  { code: "ga", label: "Irish (Gaeilge)" },
-  { code: "fr", label: "French" },
-  { code: "de", label: "German" },
-  { code: "es", label: "Spanish" },
-  { code: "pl", label: "Polish" },
-];
+// Assembles the final six-item interventions array for a given stakes
+// tier. Used identically by the live path (api/generate-guide.js) and
+// the fallback path (data/fallback-guides.js) so the two can never
+// present different intervention content for the same sector.
+function buildInterventions(stakesTier) {
+  const flag = flagForStakesTier(stakesTier);
+  return INTERVENTIONS.map((item) => ({
+    title: item.title,
+    body: item.body,
+    suggestedPractice: item.suggestedPractice,
+    citation: item.citation,
+    flagLabel: flag,
+  }));
+}
 
 function getSector(sectorId) {
   return SECTORS.find((s) => s.id === sectorId) || null;
-}
-
-function getLanguage(languageCode) {
-  return LANGUAGES.find((l) => l.code === languageCode) || null;
 }
 
 module.exports = {
   SECTORS,
   INTERVENTIONS,
   ARTICLE_22_CAVEAT,
-  LANGUAGES,
+  CUSTOMER_NOTICE,
+  DISCLAIMER,
   flagForStakesTier,
+  buildInterventions,
   getSector,
-  getLanguage,
 };

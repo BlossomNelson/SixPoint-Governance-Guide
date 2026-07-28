@@ -6,11 +6,11 @@
   <title>SixPoint: AI Governance Guide Generator</title>
   <meta
     name="description"
-    content="Pick your sector and language. Get a short AI governance guide, grounded in GDPR and the EU AI Act."
+    content="Pick your sector. Get a short AI governance guide, grounded in GDPR and the EU AI Act."
   />
 
   <!-- Fraunces (serif) for headlines, Inter for body text, IBM Plex Mono for
-       small labels and legal citations specifically -- so a citation reads
+       small labels and legal citations specifically, so a citation reads
        as a citation, not as prose (see styles.css). -->
   <link rel="preconnect" href="https://fonts.googleapis.com" />
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
@@ -35,7 +35,7 @@
       <div class="hero">
         <h1>Your AI governance guide, in under a minute.</h1>
         <p class="lede">
-          Pick your sector and language. Get a short governance guide, grounded in GDPR and the EU AI Act.
+          Pick your sector. Get a short governance guide, grounded in GDPR and the EU AI Act.
         </p>
         <div class="hero-actions">
           <button id="start-btn" class="btn-primary" type="button">Build your guide</button>
@@ -45,14 +45,8 @@
 
     <!-- ================= PICKER ================= -->
     <section id="view-picker" class="view" hidden>
-      <span class="step-label">Step 1 of 2</span>
       <h2>Choose your sector</h2>
       <div class="sector-grid" id="sector-grid" role="group" aria-label="Choose your business sector"></div>
-
-      <span class="step-label">Step 2 of 2</span>
-      <h2>Choose a language</h2>
-      <p>Citations always stay in their original legal form, in every language.</p>
-      <div class="lang-grid" id="lang-grid" role="group" aria-label="Choose a language"></div>
 
       <div class="picker-actions">
         <button id="generate-btn" class="btn-primary" type="button" disabled>Generate my guide</button>
@@ -73,35 +67,40 @@
       <button id="retry-btn" class="btn-primary" type="button">Try again</button>
     </section>
 
-    <!-- ================= RESULTS ================= -->
-    <section id="view-results" class="view" hidden>
+    <!-- ================= STAKES ================= -->
+    <section id="view-stakes" class="view" hidden>
       <div id="fallback-banner" class="fallback-banner" hidden>
         <strong>Showing a cached version.</strong>
         <span id="fallback-note-text"></span>
       </div>
 
-      <div class="stakes-block">
-        <span id="stakes-tier-badge" class="stakes-tier-badge mono"></span>
-        <h2 id="stakes-heading"></h2>
-        <p id="stakes-explanation"></p>
+      <span id="stakes-tier-badge" class="stakes-tier-badge mono"></span>
+      <h2 id="stakes-heading"></h2>
+      <p id="stakes-explanation"></p>
 
-        <h3>Risks worth watching for</h3>
-        <ul id="sector-risks" class="risk-list"></ul>
+      <div class="caveat-box">
+        <p id="caveat-text"></p>
+        <span id="caveat-citation" class="badge badge-citation"></span>
       </div>
 
-      <div class="interventions-block">
-        <span class="step-label">Your governance guide</span>
-        <h2>Six interventions</h2>
-        <ol id="interventions-list" style="list-style: none; padding: 0; margin: 16px 0 0;"></ol>
-      </div>
+      <h3>Risks worth watching for</h3>
+      <ul id="sector-risks" class="risk-list"></ul>
 
-      <div class="tell-customers-block">
+      <div class="picker-actions">
+        <button id="see-guide-btn" class="btn-primary" type="button">See your six interventions</button>
+        <button id="back-to-picker" class="btn-link" type="button">← Back</button>
+      </div>
+    </section>
+
+    <!-- ================= GUIDE ================= -->
+    <section id="view-guide" class="view" hidden>
+      <span class="step-label">Your governance guide</span>
+      <h2>Six interventions</h2>
+      <ol id="interventions-list" style="list-style: none; padding: 0; margin: 16px 0 0;"></ol>
+
+      <div class="customer-notice-block">
         <h2>Tell your customers</h2>
-        <p>A ready-to-paste sentence for your website or terms of service:</p>
-        <div class="tell-customers-box">
-          <blockquote id="tell-customers-text"></blockquote>
-          <button id="copy-tell-customers" class="btn-secondary" type="button">Copy sentence</button>
-        </div>
+        <p id="customer-notice-text"></p>
       </div>
 
       <div class="disclaimer-block">
@@ -110,6 +109,7 @@
 
       <div class="actions-block">
         <button id="download-btn" class="btn-primary" type="button">Download as text</button>
+        <button id="back-to-stakes" class="btn-link" type="button">← Back</button>
         <button id="restart-btn" class="btn-link" type="button">Start a new guide</button>
       </div>
     </section>

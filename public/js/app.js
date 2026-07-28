@@ -2,10 +2,11 @@
  * app.js
  * ------------------------------------------------------------------
  * Small hand-written state machine, no framework: the spec calls for
- * a static frontend, and this app has exactly five states (landing,
- * picker, loading, results, error) with no shared client-side state
- * beyond "which sector/language did the user pick" -- a framework
- * would add build tooling for very little benefit here.
+ * a static frontend, and this app has six states (landing, picker,
+ * loading, stakes, guide, error) with no shared client-side state
+ * beyond "which sector did the user pick" and the generated guide
+ * itself, so a framework would add build tooling for very little
+ * benefit here.
  * ------------------------------------------------------------------
  */
 
@@ -14,7 +15,6 @@
 
   const state = {
     sectorId: null,
-    languageCode: null,
     guide: null,
   };
 
@@ -23,7 +23,8 @@
     picker: document.getElementById("view-picker"),
     loading: document.getElementById("view-loading"),
     error: document.getElementById("view-error"),
-    results: document.getElementById("view-results"),
+    stakes: document.getElementById("view-stakes"),
+    guide: document.getElementById("view-guide"),
   };
 
   function showView(name) {
@@ -53,7 +54,7 @@
       btn.className = "sector-card";
       btn.dataset.sectorId = sector.id;
       btn.setAttribute("aria-pressed", "false");
-      // Stakes tier (higher/standard) is deliberately not shown here -- it
+      // Stakes tier (higher/standard) is deliberately not shown here: it
       // only appears once a sector is picked and the guide is generated,
       // so the picker itself stays neutral between sectors.
       btn.innerHTML = `<span class="sector-card-label">${sector.label}</span>`;
@@ -71,33 +72,8 @@
     });
   }
 
-  function renderLangGrid() {
-    const grid = document.getElementById("lang-grid");
-    grid.innerHTML = "";
-    LANGUAGE_OPTIONS.forEach((lang) => {
-      const btn = document.createElement("button");
-      btn.type = "button";
-      btn.className = "lang-chip";
-      btn.dataset.languageCode = lang.code;
-      btn.setAttribute("aria-pressed", "false");
-      btn.textContent = lang.label;
-      btn.addEventListener("click", () => {
-        state.languageCode = lang.code;
-        grid.querySelectorAll(".lang-chip").forEach((c) => {
-          c.classList.remove("selected");
-          c.setAttribute("aria-pressed", "false");
-        });
-        btn.classList.add("selected");
-        btn.setAttribute("aria-pressed", "true");
-        updateGenerateButton();
-      });
-      grid.appendChild(btn);
-    });
-  }
-
   function updateGenerateButton() {
-    const btn = document.getElementById("generate-btn");
-    btn.disabled = !(state.sectorId && state.languageCode);
+    document.getElementById("generate-btn").disabled = !state.sectorId;
   }
 
   // ---------------- Generation ----------------
@@ -108,10 +84,7 @@
       const res = await fetch("/api/generate-guide", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          sectorId: state.sectorId,
-          languageCode: state.languageCode,
-        }),
+        body: JSON.stringify({ sectorId: state.sectorId }),
       });
 
       if (!res.ok) {
@@ -120,13 +93,14 @@
 
       const guide = await res.json();
       state.guide = guide;
-      renderResults(guide);
-      showView("results");
+      renderStakes(guide);
+      renderGuide(guide);
+      showView("stakes");
     } catch (err) {
       // Note: this only fires if the /api/generate-guide request itself
       // fails to complete (e.g. the deployment is unreachable). If the
       // Anthropic call fails but the function still runs, the backend's
-      // own fallback logic already returns 200 with isFallback: true --
+      // own fallback logic already returns 200 with isFallback: true:
       // this branch is the outer, last-resort safety net.
       document.getElementById("error-message").textContent =
         "We couldn't generate your guide right now (" + err.message + "). Please try again.";
@@ -134,9 +108,9 @@
     }
   }
 
-  // ---------------- Results rendering ----------------
+  // ---------------- Stakes screen rendering ----------------
 
-  function renderResults(guide) {
+  function renderStakes(guide) {
     const fallbackBanner = document.getElementById("fallback-banner");
     if (guide.isFallback) {
       document.getElementById("fallback-note-text").textContent =
@@ -154,6 +128,11 @@
     document.getElementById("stakes-heading").textContent = guide.stakesHeading;
     document.getElementById("stakes-explanation").textContent = guide.stakesExplanation;
 
+    if (guide.article22Caveat) {
+      document.getElementById("caveat-text").textContent = guide.article22Caveat.text;
+      document.getElementById("caveat-citation").textContent = guide.article22Caveat.citation;
+    }
+
     const risksList = document.getElementById("sector-risks");
     risksList.innerHTML = "";
     (guide.sectorRisks || []).forEach((risk) => {
@@ -161,13 +140,17 @@
       li.textContent = risk;
       risksList.appendChild(li);
     });
+  }
 
+  // ---------------- Guide screen rendering ----------------
+
+  function renderGuide(guide) {
     const interventionsList = document.getElementById("interventions-list");
     interventionsList.innerHTML = "";
     (guide.interventions || []).forEach((item, index) => {
       const li = document.createElement("li");
       li.className = "intervention-card";
-      const isNonNegotiable = item.flagLevel === "non-negotiable";
+      const isNonNegotiable = item.flagLabel === "non-negotiable";
       li.innerHTML = `
         <div class="intervention-head">
           <h3 class="intervention-title"><span class="intervention-number">${String(
@@ -188,7 +171,7 @@
       interventionsList.appendChild(li);
     });
 
-    document.getElementById("tell-customers-text").textContent = guide.tellYourCustomers;
+    document.getElementById("customer-notice-text").textContent = guide.customerNotice;
     document.getElementById("disclaimer-text").textContent = guide.disclaimer;
   }
 
@@ -198,7 +181,7 @@
     return div.innerHTML;
   }
 
-  // ---------------- Download / copy ----------------
+  // ---------------- Download ----------------
 
   function guideToPlainText(guide) {
     const lines = [];
@@ -212,6 +195,10 @@
     lines.push("");
     lines.push(guide.stakesHeading);
     lines.push(guide.stakesExplanation);
+    if (guide.article22Caveat) {
+      lines.push("");
+      lines.push(`${guide.article22Caveat.text} (${guide.article22Caveat.citation})`);
+    }
     lines.push("");
     lines.push("RISKS TO WATCH FOR");
     (guide.sectorRisks || []).forEach((r) => lines.push(`- ${r}`));
@@ -225,7 +212,7 @@
     });
     lines.push("");
     lines.push("TELL YOUR CUSTOMERS");
-    lines.push(guide.tellYourCustomers);
+    lines.push(guide.customerNotice);
     lines.push("");
     lines.push(guide.disclaimer);
     return lines.join("\n");
@@ -238,42 +225,21 @@
     const url = URL.createObjectURL(blob);
     const a = document.createElement("a");
     a.href = url;
-    a.download = `sixpoint-guide-${state.sectorId}-${state.languageCode}.txt`;
+    a.download = `sixpoint-guide-${state.sectorId}.txt`;
     document.body.appendChild(a);
     a.click();
     document.body.removeChild(a);
     URL.revokeObjectURL(url);
   }
 
-  async function copyTellCustomers() {
-    const text = document.getElementById("tell-customers-text").textContent;
-    const btn = document.getElementById("copy-tell-customers");
-    try {
-      await navigator.clipboard.writeText(text);
-      const original = btn.textContent;
-      btn.textContent = "Copied";
-      setTimeout(() => {
-        btn.textContent = original;
-      }, 1500);
-    } catch {
-      // Clipboard API can be unavailable (older browsers, insecure
-      // context); fail quietly rather than showing an error for a
-      // convenience feature that isn't core to the guide itself.
-      btn.textContent = "Copy failed, select manually";
-    }
-  }
-
   // ---------------- Wire up ----------------
 
   function resetPickerSelection() {
     state.sectorId = null;
-    state.languageCode = null;
-    document
-      .querySelectorAll(".sector-card, .lang-chip")
-      .forEach((el) => {
-        el.classList.remove("selected");
-        el.setAttribute("aria-pressed", "false");
-      });
+    document.querySelectorAll(".sector-card").forEach((el) => {
+      el.classList.remove("selected");
+      el.setAttribute("aria-pressed", "false");
+    });
     updateGenerateButton();
   }
 
@@ -289,9 +255,19 @@
 
   document.getElementById("retry-btn").addEventListener("click", generateGuide);
 
-  document.getElementById("download-btn").addEventListener("click", downloadGuide);
+  document.getElementById("see-guide-btn").addEventListener("click", () => {
+    showView("guide");
+  });
 
-  document.getElementById("copy-tell-customers").addEventListener("click", copyTellCustomers);
+  document.getElementById("back-to-picker").addEventListener("click", () => {
+    showView("picker");
+  });
+
+  document.getElementById("back-to-stakes").addEventListener("click", () => {
+    showView("stakes");
+  });
+
+  document.getElementById("download-btn").addEventListener("click", downloadGuide);
 
   document.getElementById("restart-btn").addEventListener("click", () => {
     state.guide = null;
@@ -300,5 +276,4 @@
   });
 
   renderSectorGrid();
-  renderLangGrid();
 })();

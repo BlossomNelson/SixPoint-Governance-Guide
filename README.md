@@ -1,10 +1,10 @@
 # SixPoint: AI Governance Guide Generator
 
 SixPoint is a practical deliverable for an MSc thesis on AI governance
-tooling for SMEs. A user picks a business sector and a language; SixPoint
-generates a short, plain-language compliance guide covering six governance
+tooling for SMEs. A user picks a business sector; SixPoint generates a
+short, plain-language compliance guide covering six governance
 interventions for AI-powered CRM tools, each grounded in a specific GDPR or
-EU AI Act article.
+EU AI Act article. English only, in this version.
 
 This document is the architecture reference for the project's Configuration
 Manual: what each part does, why it's built that way, how to run it locally,
@@ -34,8 +34,9 @@ and how it deploys.
 ```
 
 - **Static frontend** (`public/`): plain HTML/CSS/JS, no framework. A
-  five-state client-side app (landing → picker → loading → results/error)
-  that calls one backend endpoint and renders whatever it gets back.
+  six-state client-side app (landing → picker → loading → stakes → guide,
+  plus error) that calls one backend endpoint and renders whatever it gets
+  back.
 - **One serverless function** (`api/generate-guide.js`): the only place
   `ANTHROPIC_API_KEY` is read. Runs on Vercel's Node runtime, never ships to
   the browser.
@@ -52,37 +53,37 @@ Claude "what does GDPR say about vendor data processing?" and trusting the
 answer: a model's recall of a specific article number is exactly the kind
 of thing that can't be checked without redoing the research anyway.
 
-Instead:
+Instead, `data/reference.js` holds every fixed fact the app uses (the six
+governance interventions and their citations, the six sectors and their
+stakes tiers, the GDPR Article 22 caveat, the closing customer-notice
+advice, and the disclaimer), all written and checked against primary
+sources **before** any code was written, by a human, once. Since this
+version is English only, there is no translation step left for the model to
+perform on that fixed content, so it isn't asked to reproduce any of it.
+`assembleGuide()` in `api/generate-guide.js` builds those fields directly
+from `data/reference.js` in code, for both the live and fallback paths.
 
-1. `data/reference.js` contains the six governance interventions, their
-   citations, the six sectors and their stakes tiers (with the specific
-   legal grounding for the two higher-stakes sectors), and the GDPR
-   Article 22 caveat, all written and checked against primary sources
-   **before** any code was written, by a human, once.
-2. `api/generate-guide.js` renders that fixed object into the **system
-   prompt** on every request (see `buildSystemPrompt`). The prompt is
-   explicit: Claude's job is to *translate* and *frame* this content, and
-   to draft 2–3 sector-specific risk examples consistent with it, not to
-   add, soften, or reinterpret any legal claim. Citations are marked
-   "do not translate" and are additionally locked down after the fact (see
-   below).
-3. The response is constrained with `output_config.format` (Anthropic's
-   structured outputs) to a strict JSON schema, so the six interventions,
-   their citations, and the stakes tier always come back as this app's
-   fixed content, faithfully translated, not as free-form prose the
-   frontend has to parse and hope matches.
-4. The **flag** on each intervention ("non-negotiable" for higher-stakes
-   sectors, "worth doing" for standard sectors) is never trusted from the
-   model's output. `flagForStakesTier()` computes it in code from the
-   sector's stakes tier, and `attachFlagLevels()` overwrites a stable
-   `flagLevel` field on the server's response after parsing. The model
-   only supplies the *translated display label* for that flag. The
-   underlying non-optional/optional distinction is deterministic.
+That leaves exactly three fields that are genuinely sector-specific and
+can't be pre-written: `stakesHeading`, `stakesExplanation`, and
+`sectorRisks`. Those are the only fields in the model's `OUTPUT_SCHEMA`, and
+the only fields the fallback content in `data/fallback-guides.js` stores per
+sector. Structured outputs (`output_config.format`) constrain the model's
+response to exactly that schema, so there's no free-form prose for the
+frontend to parse and hope matches, and no way for the model to smuggle in
+an extra field it wasn't asked for.
+
+The **flag** on each intervention ("non-negotiable" for higher-stakes
+sectors, "worth doing" for standard sectors) is likewise never asked of the
+model: `buildInterventions()` computes it in code from the sector's stakes
+tier via `flagForStakesTier()`.
 
 The net effect: if an examiner asks "how do you know the model didn't just
-make up a citation," the answer is that it structurally can't: every
-citation in every guide traces back to one line in `data/reference.js`,
-and the model's role is translation and framing, not legal research.
+make up a citation, or water down the Article 22 caveat," the answer is
+that it structurally can't. Neither one is ever sent to the model to
+generate or transform; both are assembled from `data/reference.js` after
+the model's response (or the fallback content) comes back. The model's only
+role is writing three sector-specific sentences within the frame that fixed
+content sets, not producing or reproducing any legal claim itself.
 
 ## The reliability design decision: a verified fallback, always
 
@@ -90,26 +91,18 @@ A live demo or an examiner's session should never fail because of a network
 blip, a rate limit, or an Anthropic API outage. `api/generate-guide.js`
 wraps the entire live-generation path, including the case where
 `ANTHROPIC_API_KEY` is missing, in a single `try/catch`. On **any**
-failure, it serves a guide from `data/fallback-guides.js` instead of an
-error, with `isFallback: true` and a short, honest note the frontend
-renders as a banner ("Showing a cached version").
+failure, it runs the same `assembleGuide()` step over the pre-written
+content in `data/fallback-guides.js` instead of returning an error, with
+`isFallback: true` and a short, honest note the frontend renders as a
+banner ("Showing a cached version").
 
-Two scope decisions worth calling out:
-
-- **Fallback guides are hand-authored, not translated.** They exist
-  precisely because live generation can't always be trusted to run, so
-  the fallback content itself has to be independently checkable, the same
-  way the reference block is. Machine-translating it into five more
-  languages at build time would mean shipping content nobody had actually
-  verified, which defeats the point. The fallback always renders in
-  English, regardless of which language the user picked, with a note
-  saying so.
-- **Fallback guides reuse `INTERVENTIONS` and `ARTICLE_22_CAVEAT` from
-  `data/reference.js` verbatim** (see `data/fallback-guides.js`). Only the
-  sector-specific risk bullets, stakes heading/explanation, and
-  "tell your customers" line are written separately per sector. This
-  guarantees the live and fallback paths can never cite different legal
-  content for the same sector.
+Because `assembleGuide()` is the single place that turns sector-specific
+content plus the fixed reference block into a full guide, the live and
+fallback paths physically cannot present different interventions,
+citations, caveat text, customer notice, or disclaimer for the same sector.
+The only thing that can differ between them is the three sector-specific
+sentences, live-written by the model versus hand-written in
+`data/fallback-guides.js`, checked against the same sources.
 
 See [Testing the fallback path](#testing-the-fallback-path) for how this
 was verified.
@@ -120,20 +113,24 @@ was verified.
 api/
   generate-guide.js       Serverless function: builds the system prompt,
                            calls Claude with a structured-output schema,
-                           falls back on any failure.
+                           assembles the full guide, falls back on any
+                           failure.
 data/
-  reference.js             Fixed, pre-verified legal reference content.
-  fallback-guides.js        Hand-authored fallback guides (English, all
-                           six sectors), built from reference.js.
+  reference.js             Fixed, pre-verified content: sectors, the six
+                           interventions, the Article 22 caveat, the
+                           customer notice, and the disclaimer.
+  fallback-guides.js        Hand-authored stakesHeading/stakesExplanation/
+                           sectorRisks per sector (English, all six
+                           sectors), the fallback content model-generated
+                           content would otherwise supply.
 public/
-  index.html               Single-page app shell (5 view states).
+  index.html               Single-page app shell (6 view states).
   css/styles.css            Design system (see Design direction below).
   js/app.js                 State machine, fetch call, rendering,
-                           download-as-text, copy-to-clipboard.
-  js/sector-data.js          UI-only sector/language labels for the
-                           picker (no legal content -- see comment in
-                           that file for why duplicating this part is
-                           safe).
+                           download-as-text.
+  js/sector-data.js          UI-only sector labels for the picker (no
+                           legal content, see comment in that file for
+                           why duplicating this part is safe).
 package.json
 .env.example
 .gitignore
@@ -144,14 +141,15 @@ package.json
 Clean and editorial rather than generic SaaS: off-white background
 (`#F4F3F1`), near-black text, a single accent (`#E8471F`) used only for the
 eyebrow label, CTAs, and citation/flag badges, never as a background
-colour. Fraunces (serif) for headlines, Inter for body text, IBM Plex Mono
-reserved for legal citations and small structural labels specifically, so
-a citation visually reads as "a precise, checkable fact" rather than
-prose, wherever it appears. The sector picker is a card grid, not a
-dropdown, so all six options are visible at once (the stakes tier is
-deliberately not shown until a guide is generated). Visible keyboard
-focus states throughout; transitions are short and understated (view
-changes, button and card hover), all disabled under
+colour. Fraunces (serif) for headlines, Inter for body text (including the
+landing page subheading, kept deliberately small and light so it doesn't
+compete with the headline), IBM Plex Mono reserved for legal citations and
+small structural labels specifically, so a citation visually reads as "a
+precise, checkable fact" rather than prose, wherever it appears. The
+sector picker is a card grid, not a dropdown, so all six options are
+visible at once (the stakes tier is deliberately not shown until a guide is
+generated). Visible keyboard focus states throughout; transitions are short
+and understated (view changes, button and card hover), all disabled under
 `prefers-reduced-motion`.
 
 ## Running locally
@@ -208,6 +206,13 @@ The API key is only ever read inside `api/generate-guide.js`, on Vercel's
 server, from `process.env.ANTHROPIC_API_KEY`. It is never included in any
 file served from `public/`, so it never reaches the browser.
 
+**Without this variable set, the app does not error: every request falls
+through to the verified fallback content in `data/fallback-guides.js`.**
+That's the reliability design decision above working as intended, not a
+bug, but it does mean the live-generation path (the model actually writing
+`stakesHeading`/`stakesExplanation`/`sectorRisks`) is only exercised once
+the key is set.
+
 ## Testing the fallback path
 
 The fallback is not a theoretical code path. It was exercised directly as
@@ -220,7 +225,8 @@ forcing the Anthropic call to throw) and confirming that:
    what happened.
 3. The frontend renders the amber "Showing a cached version" banner and a
    complete, correctly-structured guide underneath it: same six
-   interventions, same citations, same flag logic, sourced from
+   interventions, same citations, same flag logic, same Article 22 caveat
+   and customer notice, sourced from `data/reference.js` and
    `data/fallback-guides.js` instead of the live model.
 
 The quickest way to reproduce this locally: unset `ANTHROPIC_API_KEY` (or
@@ -230,11 +236,19 @@ throws before any network call is made, so this exercises the exact same
 
 ## Content scope and limitations
 
-- **Sectors and languages are closed lists by design** (see spec: "no
-  other option" for sectors). This keeps every possible input reviewable
-  by a human, which a free-text sector field would not allow.
+- **Sectors are a closed list by design** (see spec: "no other option").
+  This keeps every possible input reviewable by a human, which a free-text
+  sector field would not allow.
+- **English only, in this version.** Multi-language generation added
+  translation risk (a model could subtly misrender a citation or a fixed
+  legal sentence) without a corresponding benefit for the initial
+  deliverable, so it was removed rather than left half-supported. The data
+  model doesn't carry a `language` field at all any more.
 - **This tool produces a starting point, not legal advice, an audit, or a
   certification of compliance**: every guide says so explicitly, in the
-  `disclaimer` field, in every language.
-- **Fallback guides are English-only**, deliberately (see above). This is
-  a scope decision made explicitly, not an oversight.
+  `disclaimer` field.
+- **Fallback content is hand-authored, not generated.** It exists because
+  live generation can't always be trusted to run, so the fallback's
+  sector-specific content has to be independently checkable the same way
+  the fixed reference block is: writing it once, by hand, is what makes
+  that possible.

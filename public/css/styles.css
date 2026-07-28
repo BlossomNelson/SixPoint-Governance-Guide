@@ -1,6 +1,6 @@
 /* ------------------------------------------------------------------
    styles.css
-   Design direction: clean, editorial, trustworthy -- not a generic
+   Design direction: clean, editorial, trustworthy, not a generic
    SaaS look. Off-white background, near-black text, a single
    confident accent used sparingly (eyebrow labels, CTAs, citation
    badges), not as a background colour anywhere.
@@ -37,7 +37,7 @@
 
   /* One easing curve, used everywhere transitions happen, so motion
      feels like a single considered decision rather than several. A
-     gentle ease-out: quick to start, soft to settle -- understated,
+     gentle ease-out: quick to start, soft to settle, understated,
      not springy. */
   --ease-standard: cubic-bezier(0.22, 0.61, 0.36, 1);
 }
@@ -66,7 +66,7 @@ body {
   padding: 0 24px;
 }
 
-/* Visible keyboard focus states everywhere -- required by spec, and
+/* Visible keyboard focus states everywhere, required by spec, and
    good practice regardless: this app is a compliance tool, so it
    should itself be usable without a mouse. */
 :focus-visible {
@@ -111,7 +111,7 @@ main {
 
 /* Screen-to-screen transition (picker -> stakes -> guide, and every
    other view change): a short, soft fade with a small rise. Subtle on
-   purpose -- long enough to read as intentional, short enough to
+   purpose: long enough to read as intentional, short enough to
    never feel like a wait. */
 .view {
   animation: fade-in 340ms var(--ease-standard);
@@ -165,9 +165,15 @@ p {
   max-width: 62ch;
 }
 
+/* Subheading under the H1: deliberately restrained so it doesn't
+   compete with the headline. Body font, modest size and weight, read
+   as a one-line clarification rather than a second thing to notice. */
 .lede {
-  font-size: 1.15rem;
+  font-family: var(--font-body);
+  font-size: 1rem;
+  font-weight: 400;
   color: var(--color-ink-soft);
+  max-width: 46ch;
 }
 
 .mono {
@@ -312,35 +318,6 @@ p {
   font-size: 0.95rem;
 }
 
-.lang-grid {
-  display: flex;
-  flex-wrap: wrap;
-  gap: 8px;
-  margin: 16px 0 40px;
-}
-
-.lang-chip {
-  background: var(--color-surface);
-  border: 1px solid var(--color-border);
-  border-radius: 999px;
-  padding: 8px 18px;
-  font-size: 0.9rem;
-  cursor: pointer;
-  transition: border-color 180ms var(--ease-standard), background-color 180ms var(--ease-standard),
-    color 180ms var(--ease-standard), transform 180ms var(--ease-standard);
-}
-
-.lang-chip:hover {
-  border-color: var(--color-ink);
-  transform: translateY(-1px);
-}
-
-.lang-chip.selected {
-  border-color: var(--color-ink);
-  background: var(--color-ink);
-  color: #fff;
-}
-
 .picker-actions {
   display: flex;
   align-items: center;
@@ -419,13 +396,31 @@ p {
   margin-bottom: 8px;
 }
 
-/* ---------- Interventions ---------- */
-
-.interventions-block {
-  margin-top: 56px;
-  border-top: 1px solid var(--color-border);
-  padding-top: 40px;
+/* The fixed, unelaborated GDPR Art. 22 line: set apart from the sector
+   rationale above it so it visually reads as a fixed rule that applies
+   regardless of sector, not as more of the same prose. */
+.caveat-box {
+  background: var(--color-surface);
+  border: 1px solid var(--color-border);
+  border-left: 3px solid var(--color-accent);
+  border-radius: var(--radius-md);
+  padding: 16px 18px;
+  margin: 20px 0 32px;
+  display: flex;
+  align-items: baseline;
+  gap: 10px;
+  flex-wrap: wrap;
 }
+
+.caveat-box p {
+  margin: 0;
+  color: var(--color-ink);
+  font-size: 0.95rem;
+  flex: 1 1 auto;
+  min-width: 200px;
+}
+
+/* ---------- Interventions ---------- */
 
 .intervention-card {
   background: var(--color-surface);
@@ -508,29 +503,18 @@ p {
 
 /* ---------- Tell your customers ---------- */
 
-.tell-customers-block {
+/* Brief advice, not a quote to copy: plain prose under its own
+   heading, set apart from the interventions above by a divider, same
+   treatment the old blockquote box no longer needs since there's
+   nothing here meant to be lifted verbatim. */
+.customer-notice-block {
   margin-top: 56px;
   border-top: 1px solid var(--color-border);
   padding-top: 40px;
 }
 
-.tell-customers-box {
-  background: var(--color-surface);
-  border: 1px solid var(--color-border);
-  border-left: 3px solid var(--color-accent);
-  border-radius: var(--radius-md);
-  padding: 20px 22px;
-  margin: 16px 0;
-}
-
-.tell-customers-box blockquote {
-  margin: 0 0 14px;
-  font-family: var(--font-serif);
-  font-size: 1.15rem;
-  font-style: italic;
-  font-weight: 500;
-  color: var(--color-ink);
-  line-height: 1.4;
+.customer-notice-block p {
+  max-width: 62ch;
 }
 
 /* ---------- Disclaimer / actions ---------- */
@@ -568,7 +552,7 @@ p {
   padding: 20px 0;
 }
 
-/* A quiet disclaimer, not a headline: small, italic, muted -- read as
+/* A quiet disclaimer, not a headline: small, italic, muted, read as
    a footnote, not a page element competing with the actual content. */
 .footer-disclaimer {
   margin: 0;
@@ -608,8 +592,7 @@ p {
   .spinner,
   .btn-primary,
   .btn-secondary,
-  .sector-card,
-  .lang-chip {
+  .sector-card {
     animation: none !important;
     transition: none !important;
   }
