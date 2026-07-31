@@ -260,9 +260,9 @@
           </div>
         </div>
         <p class="intervention-body">${escapeHtml(item.body)}</p>
-        <p class="intervention-practice"><strong>${
-          isMet ? "Already in place:" : "Suggested practice:"
-        }</strong> ${escapeHtml(item.suggestedPractice)}</p>
+        ${(item.recommendations || [])
+          .map((line) => `<p class="intervention-practice">${escapeHtml(line)}</p>`)
+          .join("")}
       `;
       interventionsList.appendChild(li);
     });
@@ -307,7 +307,7 @@
         `${i + 1}. ${item.title} [${isMet ? "Met" : "Not met"}] [${item.flagLabel}] (${item.citation})`
       );
       lines.push(item.body);
-      lines.push(`${isMet ? "Already in place" : "Suggested practice"}: ${item.suggestedPractice}`);
+      (item.recommendations || []).forEach((line) => lines.push(line));
     });
     lines.push("");
     lines.push("TELL YOUR CUSTOMERS");

@@ -545,6 +545,10 @@ p {
   margin-bottom: 10px;
 }
 
+/* Answer-specific recommendation text: one line per applicable "no"
+   answer, so an intervention with two or three unmet questions shows
+   that many stacked lines, each with its own left-border indent. The
+   gap between stacked lines only applies when there's more than one. */
 .intervention-practice {
   font-size: 0.9rem;
   border-left: 2px solid var(--color-border);
@@ -553,8 +557,8 @@ p {
   margin: 0;
 }
 
-.intervention-practice strong {
-  color: var(--color-ink);
+.intervention-practice + .intervention-practice {
+  margin-top: 8px;
 }
 
 /* ---------- Tell your customers ---------- */

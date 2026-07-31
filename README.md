@@ -105,12 +105,24 @@ way, one level further: the SME's ten yes/no answers never reach Claude at
 all. `api/score-assessment.js` calls `statusForIntervention()` in
 `data/reference.js`, which looks up the fixed questions mapped to that
 intervention and requires every one of them to be answered "yes" for a
-"Met" status; a single "no" among them is enough for "Not Met". No new
-legal content needed to be added anywhere for this: each question is just
-the concrete, checkable version of a practice its intervention's existing
-`suggestedPractice` already describes, so "Not Met" simply surfaces that
-same fixed text as a recommendation, and "Met" surfaces it as confirmation
-("Already in place") instead.
+"Met" status; a single "no" among them is enough for "Not Met".
+
+The recommendation text shown alongside each intervention is
+**answer-specific, not one generic line per intervention.** Each
+assessment question has its own fixed `textIfNo` in the `RECOMMENDATIONS`
+object in `data/reference.js`; `buildRecommendationLines()` selects which
+of those fixed lines to show based on exactly which of the SME's answers
+were "no", so two SMEs who both fail the same intervention for different
+reasons see different, specific recommendations, not one text standing in
+for both problems. Where a question's line only makes sense once an
+earlier one is addressed (`human-review`'s Q6, "make the review more
+thorough", assumes a review process already exists per Q5), that line
+only appears once the prerequisite question is "yes"; everywhere else,
+every applicable "no" line is shown independently. When every mapped
+question is "yes", a single fixed confirmation line is shown instead
+(e.g. "Met. Continue reviewing this periodically..."). All of this is
+fixed, pre-written text: only which lines to show is computed at
+runtime, never the text itself.
 
 The net effect: if an examiner asks "how do you know the model didn't just
 make up a citation, water down the Article 22 caveat, or score the
@@ -198,8 +210,9 @@ api/
 data/
   reference.js             Fixed, pre-verified content: sectors (with
                            each one's stakes headline reason), the six
-                           interventions, the ten assessment questions
-                           and the scoring rule, the Article 22 caveat,
+                           interventions, the ten assessment questions,
+                           the scoring rule and per-question
+                           recommendation text, the Article 22 caveat,
                            the customer notice, and the disclaimer.
   fallback-guides.js        Hand-authored stakesExplanation/sectorRisks
                            per sector (English, all six sectors), the

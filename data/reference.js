@@ -11,13 +11,15 @@
  *
  * English only (no translation): everything in this file that is fixed,
  * identical text regardless of sector (the six interventions, the ten
- * assessment questions, the Article 22 caveat, the customer notice, the
- * disclaimer) is assembled directly in code, not requested from the
- * model at all. api/generate-guide.js assembles the stakes-tier content
- * (plus the fixed question list); api/score-assessment.js assembles the
- * six interventions with their Met/Not Met status, computed by pure
- * rule-based lookup against the SME's answers. There is nothing left for
- * the model to transform on any of that content, so asking it to
+ * assessment questions, the per-question recommendation text, the
+ * Article 22 caveat, the customer notice, the disclaimer) is assembled
+ * directly in code, not requested from the model at all.
+ * api/generate-guide.js assembles the stakes-tier content (plus the
+ * fixed question list); api/score-assessment.js assembles the six
+ * interventions with their Met/Not Met status and answer-specific
+ * recommendation lines, computed by pure rule-based lookup against the
+ * SME's answers (see buildRecommendationLines). There is nothing left
+ * for the model to transform on any of that content, so asking it to
  * reproduce fixed text verbatim, or to score an assessment, would only
  * add a chance of drifting from the source with no upside. The model's
  * role is limited to the parts that are genuinely sector-specific and
@@ -84,20 +86,19 @@ const SECTORS = [
 ];
 
 // The six governance interventions. Fully fixed, code-assembled content:
-// title, body, suggestedPractice, and citation never vary by sector or
-// request. Only the flag (computed below from the sector's stakes tier)
-// changes. Suggested practices are written to name the concrete
-// regulatory mechanism they come from (a required contract term, a
-// named record, a deadline) rather than a generic reminder, so each one
-// is actionable on its own.
+// title, body, and citation never vary by sector or request. Only the
+// flag (computed below from the sector's stakes tier) changes. The
+// recommendation text shown alongside each intervention is NOT a single
+// fixed string here: it's selected per-question from RECOMMENDATIONS
+// below, based on exactly which of the SME's answers were "no", so two
+// SMEs failing the same intervention for different reasons see
+// different, specific recommendation text rather than one generic line.
 const INTERVENTIONS = [
   {
     id: "vendor-responsibility",
     title: "Who's responsible for what",
     body:
       "Check whether your vendor trains its AI on your data, shares it with others (including subprocessors), or keeps it for a set time. If undocumented, ask the vendor and treat the data as unprotected until you get an answer.",
-    suggestedPractice:
-      "Get a signed Data Processing Agreement from the vendor. GDPR Art. 28(3) requires one in writing, covering what the vendor does with your data, for how long, and who else can access it.",
     citation: "GDPR Art. 28",
   },
   {
@@ -105,24 +106,18 @@ const INTERVENTIONS = [
     title: "One record of your data",
     body:
       "Write down what customer data each AI feature uses, why, for how long, and who else can see it.",
-    suggestedPractice:
-      "Keep a written Record of Processing Activities per GDPR Art. 30(1): purpose, data categories, recipients, and retention period for each AI feature. Update it the day a feature changes, not at the next audit.",
     citation: "GDPR Art. 30",
   },
   {
     id: "default-settings",
     title: "What the default settings actually do",
     body: "Check for settings on by default and turn off what isn't needed.",
-    suggestedPractice:
-      "Apply data protection by design and by default, GDPR Art. 25: turn off any setting that shares, trains on, or retains more data than the feature needs, and re-check after every vendor update.",
     citation: "GDPR Art. 25",
   },
   {
     id: "human-review",
     title: "A human checks AI output before it reaches a customer",
     body: "Individually for anything significant, spot-checks otherwise.",
-    suggestedPractice:
-      "Name a specific reviewer with real authority to change or block the AI's output, not just read it. EU AI Act Art. 14 requires a person able to intervene, not a rubber stamp.",
     citation: "EU AI Act Art. 14",
   },
   {
@@ -130,8 +125,6 @@ const INTERVENTIONS = [
     title: "Someone checks for patterns, not just single cases",
     body:
       "Periodically check whether the AI treats customer groups differently for no good reason.",
-    suggestedPractice:
-      "Put a fairness check on the calendar, for example quarterly, comparing outcomes across customer groups. GDPR Art. 5(1)(a)'s fairness principle expects this to be routine, not something you only look at after a complaint.",
     citation: "GDPR Art. 5(1)(a)",
   },
   {
@@ -139,11 +132,110 @@ const INTERVENTIONS = [
     title: "An incident plan, written before you need it",
     body:
       "Decide in advance who notices a problem, who acts, how customers are told, and how the 72-hour regulator notification deadline is met.",
-    suggestedPractice:
-      "Name who assesses a suspected breach and who notifies the regulator inside GDPR Art. 33's 72-hour deadline. If the breach is high-risk to customers, Art. 34 separately requires telling them directly, so agree who does that too.",
     citation: "GDPR Art. 33-34",
   },
 ];
+
+// Answer-specific recommendation text, fixed and pre-written per
+// question, never generated by Claude. Only the branching logic (which
+// of these lines to show, based on which questions the SME answered
+// "no") is computed at runtime, in buildRecommendationLines() below.
+//
+// Each rule's textIfNo is shown when that question was answered "no".
+// A rule with requiresYes only fires once the listed prior question(s)
+// are "yes": human-review's Q6 line ("make the review more thorough")
+// assumes a review process already exists (Q5 "yes"), since telling an
+// SME to make a nonexistent process "more thorough" is confusing advice
+// when the real gap is that no one reviews AI output at all yet. Where
+// no requiresYes is given (vendor-responsibility, incident-plan), every
+// applicable "no" line is shown independently, since those questions
+// don't depend on each other the same way.
+const RECOMMENDATIONS = {
+  "vendor-responsibility": {
+    metText:
+      "Met. Continue reviewing this periodically, as vendors can change their terms.",
+    rules: [
+      {
+        questionId: "q1",
+        textIfNo:
+          "Ask your CRM vendor directly whether they train AI on your data, share it with others, or keep it for a set time, and get this in writing.",
+      },
+      {
+        questionId: "q2",
+        textIfNo:
+          "Once you have an answer from your vendor, keep a written record of it, and revisit it periodically since vendors change their terms.",
+      },
+    ],
+  },
+  "data-record": {
+    metText: "Met. Keep this record current as you add or change AI features.",
+    rules: [
+      {
+        questionId: "q3",
+        textIfNo:
+          "Create a documented record of what customer data each AI feature uses, and why. Keep it updated as you add or change features.",
+      },
+    ],
+  },
+  "default-settings": {
+    metText:
+      "Met. Check back periodically, since vendors can change defaults without notice.",
+    rules: [
+      {
+        questionId: "q4",
+        textIfNo:
+          "Check your CRM's AI settings for anything turned on by default, and switch off what you don't need. When unsure, choose the stricter setting.",
+      },
+    ],
+  },
+  "human-review": {
+    metText:
+      "Met. Keep confirming this is actually happening, not just agreed on paper.",
+    rules: [
+      {
+        questionId: "q5",
+        textIfNo:
+          "Put a process in place for a person to review AI-generated content before it reaches a customer.",
+      },
+      {
+        questionId: "q6",
+        textIfNo:
+          "Make sure your review process is more thorough for anything that could seriously affect a customer, not just a general check.",
+        requiresYes: ["q5"],
+      },
+    ],
+  },
+  "pattern-check": {
+    metText: "Met. Keep checking regularly.",
+    rules: [
+      {
+        questionId: "q7",
+        textIfNo:
+          "Set a regular time to check whether your AI treats different groups of customers differently, not just reactively when something goes wrong.",
+      },
+    ],
+  },
+  "incident-plan": {
+    metText: "Met. Revisit the plan periodically to keep it current.",
+    rules: [
+      {
+        questionId: "q8",
+        textIfNo:
+          "Write an incident plan naming who notices a problem, who acts, and who is responsible for the response.",
+      },
+      {
+        questionId: "q9",
+        textIfNo:
+          "Update your existing plan to specifically cover the 72-hour regulator notification deadline.",
+      },
+      {
+        questionId: "q10",
+        textIfNo:
+          "Make sure everyone who would need to act on the plan actually knows it exists, not just the person who wrote it.",
+      },
+    ],
+  },
+};
 
 // GDPR Article 22 caveat: must appear in EVERY guide, in every sector,
 // regardless of stakes tier, as one short, plain, unelaborated sentence
@@ -278,6 +370,33 @@ function flagForStakesTier(stakesTier) {
   return stakesTier === "higher" ? "non-negotiable" : "worth doing";
 }
 
+// Builds the recommendation lines shown for one intervention, based on
+// exactly which of its mapped questions were answered "no". When every
+// mapped question is "yes", this returns the single fixed metText line.
+// Otherwise it returns one fixed line per applicable "no" answer (in
+// question order), so an SME who failed two different questions under
+// the same intervention sees both specific recommendations, not one
+// generic one standing in for both problems.
+function buildRecommendationLines(interventionId, answers) {
+  const config = RECOMMENDATIONS[interventionId];
+  if (statusForIntervention(interventionId, answers) === "met") {
+    return [config.metText];
+  }
+
+  const lines = [];
+  config.rules.forEach((rule) => {
+    const answeredNo = !(answers && answers[rule.questionId] === true);
+    if (!answeredNo) return;
+    const prerequisitesMet =
+      !rule.requiresYes ||
+      rule.requiresYes.every((qid) => answers && answers[qid] === true);
+    if (prerequisitesMet) {
+      lines.push(rule.textIfNo);
+    }
+  });
+  return lines;
+}
+
 // Assembles the final six-item interventions array for a given stakes
 // tier and set of assessment answers. Used by api/score-assessment.js,
 // the one place scoring happens, so there is a single implementation of
@@ -289,7 +408,7 @@ function buildInterventions(stakesTier, answers) {
     id: item.id,
     title: item.title,
     body: item.body,
-    suggestedPractice: item.suggestedPractice,
+    recommendations: buildRecommendationLines(item.id, answers),
     citation: item.citation,
     flagLabel: flag,
     status: statusForIntervention(item.id, answers),
@@ -303,12 +422,14 @@ function getSector(sectorId) {
 module.exports = {
   SECTORS,
   INTERVENTIONS,
+  RECOMMENDATIONS,
   ARTICLE_22_CAVEAT,
   CUSTOMER_NOTICE,
   DISCLAIMER,
   ASSESSMENT_QUESTIONS,
   flagForStakesTier,
   statusForIntervention,
+  buildRecommendationLines,
   buildInterventions,
   buildStakesHeadline,
   getSector,
