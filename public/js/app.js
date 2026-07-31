@@ -2,11 +2,11 @@
  * app.js
  * ------------------------------------------------------------------
  * Small hand-written state machine, no framework: the spec calls for
- * a static frontend, and this app has six states (landing, picker,
- * loading, stakes, guide, error) with no shared client-side state
- * beyond "which sector did the user pick" and the generated guide
- * itself, so a framework would add build tooling for very little
- * benefit here.
+ * a static frontend, and this app has seven states (landing, picker,
+ * loading, stakes, assessment, guide, error) with no shared client-side
+ * state beyond "which sector did the user pick", their assessment
+ * answers, and the guide content assembled across the two API calls,
+ * so a framework would add build tooling for very little benefit here.
  * ------------------------------------------------------------------
  */
 
@@ -16,7 +16,14 @@
   const state = {
     sectorId: null,
     guide: null,
+    answers: {},
   };
+
+  // Which action to re-run when the user hits "Try again" on the error
+  // screen: whichever of the two API calls (stage 1 or stage 2) most
+  // recently failed, so a retry resumes from where it broke rather than
+  // always restarting the whole flow from the sector picker.
+  let retryAction = generateGuide;
 
   const views = {
     landing: document.getElementById("view-landing"),
@@ -24,6 +31,7 @@
     loading: document.getElementById("view-loading"),
     error: document.getElementById("view-error"),
     stakes: document.getElementById("view-stakes"),
+    assessment: document.getElementById("view-assessment"),
     guide: document.getElementById("view-guide"),
   };
 
@@ -76,9 +84,10 @@
     document.getElementById("generate-btn").disabled = !state.sectorId;
   }
 
-  // ---------------- Generation ----------------
+  // ---------------- Generation (stage 1: stakes content) ----------------
 
   async function generateGuide() {
+    retryAction = generateGuide;
     showView("loading");
     try {
       const res = await fetch("/api/generate-guide", {
@@ -93,8 +102,8 @@
 
       const guide = await res.json();
       state.guide = guide;
+      state.answers = {};
       renderStakes(guide);
-      renderGuide(guide);
       showView("stakes");
     } catch (err) {
       // Note: this only fires if the /api/generate-guide request itself
@@ -104,6 +113,89 @@
       // this branch is the outer, last-resort safety net.
       document.getElementById("error-message").textContent =
         "We couldn't generate your guide right now (" + err.message + "). Please try again.";
+      showView("error");
+    }
+  }
+
+  // ---------------- Assessment (required, ten fixed questions) ----------------
+
+  function renderAssessmentQuestions(questions) {
+    const list = document.getElementById("assessment-list");
+    list.innerHTML = "";
+    (questions || []).forEach((q, index) => {
+      const li = document.createElement("li");
+      li.className = "assessment-item";
+      li.innerHTML = `
+        <p class="assessment-question"><span class="intervention-number">${String(
+          index + 1
+        ).padStart(2, "0")}</span>${escapeHtml(q.text)}</p>
+        <div class="assessment-answers" role="group" aria-label="Answer to question ${index + 1}">
+          <button type="button" class="answer-btn" data-question-id="${q.id}" data-answer="yes" aria-pressed="false">Yes</button>
+          <button type="button" class="answer-btn" data-question-id="${q.id}" data-answer="no" aria-pressed="false">No</button>
+        </div>
+      `;
+      list.appendChild(li);
+
+      // Restore a previous answer if the user has come back to this
+      // screen (for example via "Back" from the guide screen), so
+      // re-answering everything from scratch is never required.
+      if (typeof state.answers[q.id] === "boolean") {
+        const answeredYes = state.answers[q.id];
+        li.querySelectorAll(".answer-btn").forEach((btn) => {
+          const isMatch = (btn.dataset.answer === "yes") === answeredYes;
+          btn.classList.toggle("selected", isMatch);
+          btn.setAttribute("aria-pressed", isMatch ? "true" : "false");
+        });
+      }
+    });
+
+    list.querySelectorAll(".answer-btn").forEach((btn) => {
+      btn.addEventListener("click", () => {
+        const questionId = btn.dataset.questionId;
+        state.answers[questionId] = btn.dataset.answer === "yes";
+        list
+          .querySelectorAll(`.answer-btn[data-question-id="${questionId}"]`)
+          .forEach((b) => {
+            b.classList.toggle("selected", b === btn);
+            b.setAttribute("aria-pressed", b === btn ? "true" : "false");
+          });
+        updateSeeResultsButton(questions.length);
+      });
+    });
+
+    updateSeeResultsButton(questions.length);
+  }
+
+  function updateSeeResultsButton(totalQuestions) {
+    const answered = Object.keys(state.answers).length;
+    document.getElementById("see-results-btn").disabled = answered < totalQuestions;
+  }
+
+  // ---------------- Scoring (stage 2: Met/Not Met per intervention) ----------------
+
+  async function submitAssessment() {
+    retryAction = submitAssessment;
+    showView("loading");
+    try {
+      const res = await fetch("/api/score-assessment", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ sectorId: state.sectorId, answers: state.answers }),
+      });
+
+      if (!res.ok) {
+        throw new Error(`Server responded with ${res.status}`);
+      }
+
+      const scored = await res.json();
+      state.guide.interventions = scored.interventions;
+      state.guide.customerNotice = scored.customerNotice;
+      state.guide.disclaimer = scored.disclaimer;
+      renderGuide(state.guide);
+      showView("guide");
+    } catch (err) {
+      document.getElementById("error-message").textContent =
+        "We couldn't score your assessment right now (" + err.message + "). Please try again.";
       showView("error");
     }
   }
@@ -121,7 +213,7 @@
     }
 
     const tierBadge = document.getElementById("stakes-tier-badge");
-    tierBadge.textContent = guide.stakesTier === "higher" ? "Higher stakes" : "Standard stakes";
+    tierBadge.textContent = guide.stakesTier === "higher" ? "High stakes" : "Standard stakes";
     tierBadge.className =
       "stakes-tier-badge mono " + (guide.stakesTier === "higher" ? "tier-higher" : "tier-standard");
 
@@ -154,12 +246,16 @@
       const li = document.createElement("li");
       li.className = "intervention-card";
       const isNonNegotiable = item.flagLabel === "non-negotiable";
+      const isMet = item.status === "met";
       li.innerHTML = `
         <div class="intervention-head">
           <h3 class="intervention-title"><span class="intervention-number">${String(
             index + 1
           ).padStart(2, "0")}</span>${escapeHtml(item.title)}</h3>
           <div class="badge-row">
+            <span class="badge badge-status ${isMet ? "status-met" : "status-not-met"}">${
+              isMet ? "Met" : "Not met"
+            }</span>
             <span class="badge badge-flag ${isNonNegotiable ? "" : "flag-worthdoing"}">${escapeHtml(
               item.flagLabel
             )}</span>
@@ -167,9 +263,9 @@
           </div>
         </div>
         <p class="intervention-body">${escapeHtml(item.body)}</p>
-        <p class="intervention-practice"><strong>Suggested practice:</strong> ${escapeHtml(
-          item.suggestedPractice
-        )}</p>
+        <p class="intervention-practice"><strong>${
+          isMet ? "Already in place:" : "Suggested practice:"
+        }</strong> ${escapeHtml(item.suggestedPractice)}</p>
       `;
       interventionsList.appendChild(li);
     });
@@ -190,7 +286,7 @@
     const lines = [];
     lines.push("SIXPOINT GOVERNANCE GUIDE");
     lines.push(`Sector: ${guide.sector}`);
-    lines.push(`Stakes: ${guide.stakesTier === "higher" ? "Higher stakes" : "Standard stakes"}`);
+    lines.push(`Stakes: ${guide.stakesTier === "higher" ? "High stakes" : "Standard stakes"}`);
     if (guide.isFallback) {
       lines.push("");
       lines.push(`Note: ${guide.fallbackNote}`);
@@ -208,10 +304,13 @@
     lines.push("");
     lines.push("SIX GOVERNANCE INTERVENTIONS");
     (guide.interventions || []).forEach((item, i) => {
+      const isMet = item.status === "met";
       lines.push("");
-      lines.push(`${i + 1}. ${item.title} [${item.flagLabel}] (${item.citation})`);
+      lines.push(
+        `${i + 1}. ${item.title} [${isMet ? "Met" : "Not met"}] [${item.flagLabel}] (${item.citation})`
+      );
       lines.push(item.body);
-      lines.push(`Suggested practice: ${item.suggestedPractice}`);
+      lines.push(`${isMet ? "Already in place" : "Suggested practice"}: ${item.suggestedPractice}`);
     });
     lines.push("");
     lines.push("TELL YOUR CUSTOMERS");
@@ -256,10 +355,11 @@
 
   document.getElementById("generate-btn").addEventListener("click", generateGuide);
 
-  document.getElementById("retry-btn").addEventListener("click", generateGuide);
+  document.getElementById("retry-btn").addEventListener("click", () => retryAction());
 
   document.getElementById("see-guide-btn").addEventListener("click", () => {
-    showView("guide");
+    renderAssessmentQuestions((state.guide && state.guide.assessmentQuestions) || []);
+    showView("assessment");
   });
 
   document.getElementById("back-to-picker").addEventListener("click", () => {
@@ -270,10 +370,18 @@
     showView("stakes");
   });
 
+  document.getElementById("see-results-btn").addEventListener("click", submitAssessment);
+
+  document.getElementById("back-to-assessment").addEventListener("click", () => {
+    renderAssessmentQuestions((state.guide && state.guide.assessmentQuestions) || []);
+    showView("assessment");
+  });
+
   document.getElementById("download-btn").addEventListener("click", downloadGuide);
 
   document.getElementById("restart-btn").addEventListener("click", () => {
     state.guide = null;
+    state.answers = {};
     resetPickerSelection();
     showView("landing");
   });

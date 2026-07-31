@@ -86,8 +86,25 @@
       </div>
 
       <div class="picker-actions">
-        <button id="see-guide-btn" class="btn-primary" type="button">See your six interventions</button>
+        <button id="see-guide-btn" class="btn-primary" type="button">Continue to quick assessment</button>
         <button id="back-to-picker" class="btn-link" type="button">← Back</button>
+      </div>
+    </section>
+
+    <!-- ================= ASSESSMENT ================= -->
+    <section id="view-assessment" class="view" hidden>
+      <span class="step-label">Before your guide</span>
+      <h2>Ten quick questions</h2>
+      <p class="lede">
+        Answer honestly. Your answers decide which of the six interventions below already reflect
+        what you're doing, and which still need attention.
+      </p>
+
+      <ol id="assessment-list" class="assessment-list"></ol>
+
+      <div class="picker-actions">
+        <button id="see-results-btn" class="btn-primary" type="button" disabled>See your results</button>
+        <button id="back-to-stakes" class="btn-link" type="button">← Back</button>
       </div>
     </section>
 
@@ -98,7 +115,7 @@
       <ol id="interventions-list" style="list-style: none; padding: 0; margin: 16px 0 0;"></ol>
 
       <div class="customer-notice-block">
-        <h2>Tell your customers</h2>
+        <h3>Tell your customers</h3>
         <p id="customer-notice-text"></p>
       </div>
 
@@ -108,7 +125,7 @@
 
       <div class="actions-block">
         <button id="download-btn" class="btn-primary" type="button">Download as text</button>
-        <button id="back-to-stakes" class="btn-link" type="button">← Back</button>
+        <button id="back-to-assessment" class="btn-link" type="button">← Back</button>
         <button id="restart-btn" class="btn-link" type="button">Start a new guide</button>
       </div>
     </section>
