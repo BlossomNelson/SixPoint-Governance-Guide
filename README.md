@@ -16,6 +16,7 @@ and how it deploys.
 - [Architecture](#architecture)
 - [The core design decision: constrained reasoning, not recall](#the-core-design-decision-constrained-reasoning-not-recall)
 - [The reliability design decision: a verified fallback, always](#the-reliability-design-decision-a-verified-fallback-always)
+- [Performance: what's actually tunable, and the practical floor](#performance-whats-actually-tunable-and-the-practical-floor)
 - [Project structure](#project-structure)
 - [Running locally](#running-locally)
 - [Deploying](#deploying)
@@ -79,14 +80,20 @@ isn't asked to reproduce any of it. `assembleStakesContent()` in
 `api/generate-guide.js` builds the stage-1 fields directly from
 `data/reference.js` in code, for both the live and fallback paths.
 
-That leaves exactly three fields that are genuinely sector-specific and
-can't be pre-written: `stakesHeading`, `stakesExplanation`, and
-`sectorRisks`. Those are the only fields in the model's `OUTPUT_SCHEMA`, and
-the only fields the fallback content in `data/fallback-guides.js` stores per
-sector. Structured outputs (`output_config.format`) constrain the model's
-response to exactly that schema, so there's no free-form prose for the
-frontend to parse and hope matches, and no way for the model to smuggle in
-an extra field it wasn't asked for.
+That leaves exactly two fields that are genuinely sector-specific and can't
+be pre-written: `stakesExplanation` and `sectorRisks`. Those are the only
+fields in the model's `OUTPUT_SCHEMA`, and the only fields the fallback
+content in `data/fallback-guides.js` stores per sector. Structured outputs
+(`output_config.format`) constrain the model's response to exactly that
+schema, so there's no free-form prose for the frontend to parse and hope
+matches, and no way for the model to smuggle in an extra field it wasn't
+asked for.
+
+The stakes page's opening headline (sector name, stakes level, and a
+one-line reason, e.g. "HEALTHCARE SECTOR - HIGH STAKE. You handle sensitive
+data.") is fixed content too, not a third model field: `buildStakesHeadline()`
+in `data/reference.js` assembles it from `sector.label`, `sector.stakesTier`,
+and a pre-written `sector.stakesReason`, all fixed per sector.
 
 The **flag** on each intervention ("non-negotiable" for higher-stakes
 sectors, "worth doing" for standard sectors) is likewise never asked of the
@@ -143,6 +150,38 @@ personalised six-point guide itself does not.
 See [Testing the fallback path](#testing-the-fallback-path) for how this
 was verified.
 
+## Performance: what's actually tunable, and the practical floor
+
+The one live network dependency in this app is `api/generate-guide.js`
+(stage 1). Three real levers were tightened there:
+
+- **Model**: defaults to `claude-haiku-4-5-20251001`, not a larger model.
+  The task is two short, tightly-schema-constrained fields (one sentence,
+  2-3 short phrases), consistent with fixed content it's given but never
+  asked to reason about independently: a fast model is the right fit, not
+  a slower, more capable one.
+- **System prompt**: trimmed to the constraint, the sector context, and
+  the two output fields, nothing else. Fewer input tokens on every
+  request.
+- **`max_tokens`**: reduced from 2048 to 300. The real output rarely
+  exceeds a couple hundred tokens; this mainly caps a worst-case runaway
+  response rather than acting as a first-order speed lever, since the
+  model stops naturally once it's written the two fields regardless of
+  the ceiling.
+
+**Honestly, the practical floor:** none of the above eliminates a live
+network round trip to Anthropic's API plus inference time, and Vercel
+serverless functions that haven't run recently can add a cold-start
+delay of a few hundred milliseconds to a couple of seconds on top of
+that. Even fully optimised, a live request realistically lands somewhere
+in the low single-digit seconds, not instant. Removing the intermediate
+"generate" click (see below) doesn't change this floor: it removes a
+decision point for the user, not backend work, since the same live-or-fallback
+call still has to complete before the stakes page can render. The
+fallback path (see above) has no such floor: once a live call fails or
+times out, the fallback content renders immediately, and stage 2
+(`api/score-assessment.js`) never depends on Anthropic at all.
+
 ## Project structure
 
 ```
@@ -157,14 +196,15 @@ api/
                            customer notice, and the disclaimer. No
                            Anthropic dependency.
 data/
-  reference.js             Fixed, pre-verified content: sectors, the six
+  reference.js             Fixed, pre-verified content: sectors (with
+                           each one's stakes headline reason), the six
                            interventions, the ten assessment questions
                            and the scoring rule, the Article 22 caveat,
                            the customer notice, and the disclaimer.
-  fallback-guides.js        Hand-authored stakesHeading/stakesExplanation/
-                           sectorRisks per sector (English, all six
-                           sectors), the fallback content model-generated
-                           content would otherwise supply.
+  fallback-guides.js        Hand-authored stakesExplanation/sectorRisks
+                           per sector (English, all six sectors), the
+                           fallback content model-generated content
+                           would otherwise supply.
 public/
   index.html               Single-page app shell (7 view states).
   css/styles.css            Design system (see Design direction below).
@@ -252,8 +292,7 @@ file served from `public/`, so it never reaches the browser.
 through to the verified fallback content in `data/fallback-guides.js`.**
 That's the reliability design decision above working as intended, not a
 bug, but it does mean the live-generation path (the model actually writing
-`stakesHeading`/`stakesExplanation`/`sectorRisks`) is only exercised once
-the key is set.
+`stakesExplanation`/`sectorRisks`) is only exercised once the key is set.
 
 ## Testing the fallback path
 
@@ -297,10 +336,16 @@ whether or not `ANTHROPIC_API_KEY` is set at all.
   `disclaimer` field.
 - **The ten-question assessment is required, not optional.** There is no
   path from the stakes screen to the six-point guide that skips it: the
-  frontend disables "See your results" until all ten questions are
+  frontend disables "Generate your report" until all ten questions are
   answered, and `api/score-assessment.js` independently rejects an
   incomplete set of answers with a 400, so the requirement holds even if
   the frontend check were somehow bypassed.
+- **Picking a sector goes straight to the stakes page.** There is no
+  separate "generate" click between the picker and the stakes screen;
+  `api/generate-guide.js` (stage 1) fires automatically as soon as a
+  sector is selected. This removes a decision point, not backend work:
+  the live-or-fallback stakes call still has to complete before the
+  stakes page can render, so the loading screen's duration is unchanged.
 - **Fallback content is hand-authored, not generated.** It exists because
   live generation can't always be trusted to run, so the fallback's
   sector-specific content has to be independently checkable the same way

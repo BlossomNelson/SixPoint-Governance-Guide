@@ -6,33 +6,33 @@
  * set in the Vercel dashboard, and is never sent to or readable by the
  * browser.
  *
- * This stage returns only the sector's stakes-tier content (heading,
- * explanation, risks) and the fixed ten-question assessment the SME
- * must complete next. It deliberately does NOT return the six
- * interventions, the customer notice, or the disclaimer: those depend
- * on the SME's assessment answers (specifically, each intervention's
- * Met/Not Met status), which don't exist yet at this stage. That
- * personalised content is assembled by api/score-assessment.js, stage 2,
- * once the assessment is submitted, with no Anthropic involvement at
- * all.
+ * This stage returns only the sector's stakes-tier content (a fixed
+ * headline, a short live-written explanation, and 2-3 sector risks) and
+ * the fixed ten-question assessment the SME must complete next. It
+ * deliberately does NOT return the six interventions, the customer
+ * notice, or the disclaimer: those depend on the SME's assessment
+ * answers (specifically, each intervention's Met/Not Met status), which
+ * don't exist yet at this stage. That personalised content is assembled
+ * by api/score-assessment.js, stage 2, once the assessment is submitted,
+ * with no Anthropic involvement at all.
  *
  * Two design decisions this file exists to enforce:
  *
  * 1. CONSTRAINED REASONING, NOT RECALL.
  *    Claude is not asked "what does GDPR say about X" and trusted to
  *    remember correctly. Every fixed legal fact (the six interventions
- *    and their citations, the assessment questions, the Article 22
- *    caveat, the customer notice, the disclaimer) lives in
- *    data/reference.js, a file a human has checked against primary
+ *    and their citations, the assessment questions, the stakes headline,
+ *    the Article 22 caveat, the customer notice, the disclaimer) lives
+ *    in data/reference.js, a file a human has checked against primary
  *    sources, and is assembled directly by assembleStakesContent()
  *    below rather than asked of the model at all. The model's only job
  *    is the genuinely sector-specific part that can't be pre-written:
- *    the stakes heading, the stakes explanation, and 2-3 sector risk
- *    examples, consistent with the fixed content it's given but never
- *    asked to reproduce that content itself. This is what makes the
- *    output's legal content independently checkable: it was checked
- *    before the model ever saw the request, and the model never gets a
- *    chance to alter it in transit.
+ *    the stakes explanation and 2-3 sector risk examples, consistent
+ *    with the fixed content it's given but never asked to reproduce that
+ *    content itself. This is what makes the output's legal content
+ *    independently checkable: it was checked before the model ever saw
+ *    the request, and the model never gets a chance to alter it in
+ *    transit.
  *
  * 2. A VERIFIED FALLBACK, ALWAYS.
  *    If the live call fails for any reason (network error, API outage,
@@ -50,62 +50,61 @@ const {
   SECTORS,
   ARTICLE_22_CAVEAT,
   ASSESSMENT_QUESTIONS,
+  buildStakesHeadline,
   getSector,
 } = require("../data/reference");
 const { getFallbackContent } = require("../data/fallback-guides");
 
 // Model is configurable via env var rather than hardcoded, so the model
-// can be swapped (e.g. for a cheaper tier) without a code change, but
-// ships with a sensible default so the app works out of the box.
-const MODEL = process.env.ANTHROPIC_MODEL || "claude-opus-5";
+// can be swapped without a code change, but ships with a sensible
+// default so the app works out of the box. Haiku 4.5, not a larger
+// model: the only thing asked of the model here is two short,
+// tightly-schema-constrained fields (one sentence, 2-3 short phrases),
+// consistent with fixed content it's given but never asked to reason
+// about independently, so this is a fast, low-complexity writing task,
+// not one that benefits from a slower, more capable model.
+const MODEL = process.env.ANTHROPIC_MODEL || "claude-haiku-4-5-20251001";
 
 // The strict JSON schema the model's response is validated against.
-// This is deliberately small: stakesHeading, stakesExplanation, and
-// sectorRisks are the only content that genuinely needs live,
-// sector-specific writing. Everything else in this stage's output is
-// fixed and assembled in code (see assembleStakesContent below), so
+// This is deliberately small: stakesExplanation and sectorRisks are the
+// only content that genuinely needs live, sector-specific writing.
+// Everything else in this stage's output, including the stakes headline,
+// is fixed and assembled in code (see assembleStakesContent below), so
 // there is nothing else for the model to be asked for.
 const OUTPUT_SCHEMA = {
   type: "object",
   properties: {
-    stakesHeading: { type: "string" },
     stakesExplanation: { type: "string" },
     sectorRisks: {
       type: "array",
       items: { type: "string" },
     },
   },
-  required: ["stakesHeading", "stakesExplanation", "sectorRisks"],
+  required: ["stakesExplanation", "sectorRisks"],
   additionalProperties: false,
 };
 
-/**
- * Renders the fixed reference block into the system prompt text. The
- * six interventions, the Article 22 caveat, and the customer notice are
- * not included here at all: the model is never asked to reproduce them,
- * so there is nothing about them to instruct it on.
- */
+// Trimmed to what the model actually needs to know: the constraint, the
+// sector context, and the two output fields. Every extra sentence here
+// is extra input tokens on every single request, so this is kept as
+// short as it can be while still being unambiguous.
 function buildSystemPrompt(sector) {
   const stakesGrounding = sector.stakesGrounding
-    ? `Legal grounding for this sector's stakes tier: ${sector.stakesGrounding}`
-    : "This is a standard-stakes sector. No elevated legal grounding beyond the six fixed governance interventions applies specifically to it.";
+    ? `Legal grounding: ${sector.stakesGrounding}`
+    : "Standard-stakes sector: no elevated legal grounding beyond the six fixed governance interventions applies.";
 
-  return `You are the content-generation engine inside SixPoint, an AI governance guide generator for SMEs. You are producing the sector-specific portion of ONE guide for ONE sector, for a non-technical, non-legal small business owner. English only.
+  return `You write the sector-specific part of a short AI governance report for one SME sector, for a non-technical reader. English only.
 
-CRITICAL CONSTRAINT, READ CAREFULLY:
-You are not being asked to recall or interpret GDPR or the EU AI Act from your own training, and you are not being asked to write the guide's six governance interventions, its GDPR Article 22 note, its customer-notice advice, or its disclaimer: those are fixed and are added by this application after you respond, not generated by you. Your only job is to write three fields, grounded in the sector context below, that are consistent with (never contradicting) a set of six fixed governance interventions covering vendor accountability, a data processing record, default settings, human review of AI output, pattern/fairness checks, and incident response. Do not invent additional legal obligations or citations, and do not describe or restate the six interventions yourself, they are not part of your output.
+Do not recall or interpret GDPR/EU AI Act content yourself, and do not write or restate the six governance interventions (vendor accountability, a data processing record, default settings, human review, pattern/fairness checks, incident response), the Article 22 note, the customer notice, or the disclaimer: those are fixed and added by the app, not you. Do not invent legal obligations or citations.
 
-TARGET SECTOR: ${sector.label}
+SECTOR: ${sector.label}
 STAKES TIER: ${sector.stakesTier} (${stakesGrounding})
 
-This guide is meant to be read in under a minute, not studied. Every field below should be as short as it can be while still being specific to ${sector.label}: a plain phrase beats a full explanation, and a short sentence beats two.
+Write exactly two fields, as short as possible while staying specific to ${sector.label}:
+- stakesExplanation: exactly 1 sentence, this sector's own stakes rationale (do not mention Article 22 or automated decision-making generally, that's covered elsewhere)
+- sectorRisks: 2-3 short bullets, roughly 6-12 words each, naming a plausible risk plainly, e.g. "Chatbots can retain full conversation logs indefinitely."
 
-OUTPUT FIELDS:
-- stakesHeading: a short heading naming the stakes tier and why, specific to ${sector.label}
-- stakesExplanation: exactly 1 sentence giving the sector's own stakes rationale (do not mention Article 22 or automated decision-making generally, that is covered elsewhere in the guide)
-- sectorRisks: 2-3 sector-specific risks a real ${sector.label} SME using an AI CRM tool could plausibly face, consistent with the six fixed interventions described above. Each one is a short bullet point, roughly 6-12 words, not a full explanatory sentence: name the risk plainly and stop. For example, "Chatbots can retain full conversation logs indefinitely." rather than "Support or in-app chatbots can retain full conversation logs, including anything a customer typed, for longer than anyone intended."
-
-Respond only with the structured JSON output. Do not add commentary outside the schema.`;
+Respond only with the structured JSON output.`;
 }
 
 /**
@@ -123,7 +122,7 @@ function assembleStakesContent(sector, sectorContent) {
   return {
     sector: sector.label,
     stakesTier: sector.stakesTier,
-    stakesHeading: sectorContent.stakesHeading,
+    stakesHeadline: buildStakesHeadline(sector),
     stakesExplanation: sectorContent.stakesExplanation,
     sectorRisks: sectorContent.sectorRisks,
     article22Caveat: ARTICLE_22_CAVEAT,
@@ -173,7 +172,13 @@ module.exports = async (req, res) => {
 
     const response = await client.messages.create({
       model: MODEL,
-      max_tokens: 2048,
+      // The real output (1 sentence + 2-3 short bullets, as JSON) rarely
+      // exceeds a couple hundred tokens. 300 leaves comfortable headroom
+      // without over-allocating, which matters here mainly for keeping
+      // the request focused, not as a first-order speed lever: the
+      // model naturally stops once it's written the two fields, this
+      // just caps a worst-case runaway response.
+      max_tokens: 300,
       system: buildSystemPrompt(sector),
       output_config: {
         format: { type: "json_schema", schema: OUTPUT_SCHEMA },
@@ -181,7 +186,7 @@ module.exports = async (req, res) => {
       messages: [
         {
           role: "user",
-          content: `Write the sector-specific stakes heading, stakes explanation, and sector risks for ${sector.label}.`,
+          content: `Write the sector-specific stakes explanation and sector risks for ${sector.label}.`,
         },
       ],
     });

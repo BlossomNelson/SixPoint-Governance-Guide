@@ -22,8 +22,6 @@
   --color-border: #ddd9d1;
   --color-accent: #e8471f;
   --color-accent-ink: #ffffff;
-  --color-higher: #e8471f;
-  --color-standard: #17140f;
   /* A soft, secondary tint for content that should read as smaller and
      quieter than the main surface cards (currently: the "Tell your
      customers" block). Distinct from both --color-bg and
@@ -371,26 +369,6 @@ p {
 }
 
 /* ---------- Stakes block ---------- */
-
-.stakes-tier-badge {
-  display: inline-block;
-  font-family: var(--font-mono);
-  font-size: 11px;
-  letter-spacing: 0.1em;
-  text-transform: uppercase;
-  padding: 5px 10px;
-  border-radius: 999px;
-  margin-bottom: 14px;
-  border: 1px solid currentColor;
-}
-
-.stakes-tier-badge.tier-higher {
-  color: var(--color-accent);
-}
-
-.stakes-tier-badge.tier-standard {
-  color: var(--color-ink-soft);
-}
 
 .risk-list {
   margin: 0;

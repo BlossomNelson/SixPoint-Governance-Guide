@@ -40,11 +40,16 @@ const SECTORS = [
     id: "technology-saas",
     label: "Technology / SaaS",
     stakesTier: "standard",
+    // Short, fixed, one-line reason used in the combined stakes headline
+    // (see buildStakesHeadline below). Not sent to the model: this is
+    // display text, not legal grounding.
+    stakesReason: "You handle customer data across your whole product.",
   },
   {
     id: "retail",
     label: "Retail",
     stakesTier: "standard",
+    stakesReason: "You handle everyday customer data.",
   },
   {
     id: "financial-services",
@@ -54,6 +59,7 @@ const SECTORS = [
     // so it can write the stakes explanation without inventing the legal basis.
     stakesGrounding:
       "EU AI Act Recital 58 names credit scoring and insurance risk assessment/pricing as high-risk AI use cases.",
+    stakesReason: "You handle sensitive financial data.",
   },
   {
     id: "healthcare",
@@ -61,16 +67,19 @@ const SECTORS = [
     stakesTier: "higher",
     stakesGrounding:
       "GDPR Article 9 classifies health data as a special category of personal data requiring extra protection, reinforced by GDPR Article 22(4) on automated decisions involving special category data.",
+    stakesReason: "You handle sensitive data.",
   },
   {
     id: "manufacturing",
     label: "Manufacturing",
     stakesTier: "standard",
+    stakesReason: "You handle business contact data.",
   },
   {
     id: "hospitality",
     label: "Hospitality",
     stakesTier: "standard",
+    stakesReason: "You handle guest data.",
   },
 ];
 
@@ -248,6 +257,18 @@ function statusForIntervention(interventionId, answers) {
   return allYes ? "met" : "not-met";
 }
 
+// The stakes page's opening headline: sector name, stakes level, and a
+// one-line reason, combined into one fixed, code-assembled string, e.g.
+// "HEALTHCARE SECTOR - HIGH STAKE. You handle sensitive data." or, for a
+// standard-tier sector, "RETAIL SECTOR. You handle everyday customer
+// data." (no "- HIGH STAKE" flag). Entirely fixed content: sector.label
+// and sector.stakesReason are both pre-written, so this is never asked
+// of the model, the same reasoning as everything else in this file.
+function buildStakesHeadline(sector) {
+  const flag = sector.stakesTier === "higher" ? " - HIGH STAKE" : "";
+  return `${sector.label.toUpperCase()} SECTOR${flag}. ${sector.stakesReason}`;
+}
+
 // Flag logic is deterministic and computed in code, not left to the model:
 // higher-stakes sectors flag every intervention "non-negotiable", standard
 // sectors flag every intervention "worth doing", never optional, in either
@@ -289,5 +310,6 @@ module.exports = {
   flagForStakesTier,
   statusForIntervention,
   buildInterventions,
+  buildStakesHeadline,
   getSector,
 };

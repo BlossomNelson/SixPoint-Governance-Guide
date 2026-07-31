@@ -11,21 +11,21 @@
  * isFallback: true, and the frontend shows a short, honest banner
  * explaining that a cached version is being shown.
  *
- * Scope: this file now stores exactly the three fields the live model
- * is asked for (stakesHeading, stakesExplanation, sectorRisks), one set
- * per sector, hand-written and checked against primary sources. It
- * deliberately does not duplicate the six interventions, the Article 22
- * caveat, the customer notice, or the disclaimer: those are fixed,
- * identical content assembled from data/reference.js by
- * api/generate-guide.js for both the live and fallback paths, so there
- * is only one place that content can ever be wrong, and the two paths
- * can never present different fixed content for the same sector.
+ * Scope: this file now stores exactly the two fields the live model is
+ * asked for (stakesExplanation, sectorRisks), one set per sector,
+ * hand-written and checked against primary sources. It deliberately does
+ * not duplicate the six interventions, the ten assessment questions, the
+ * stakes headline, the Article 22 caveat, the customer notice, or the
+ * disclaimer: those are fixed, identical content assembled from
+ * data/reference.js by api/generate-guide.js for both the live and
+ * fallback paths, so there is only one place that content can ever be
+ * wrong, and the two paths can never present different fixed content for
+ * the same sector.
  * ------------------------------------------------------------------
  */
 
 const FALLBACK_CONTENT = {
   "technology-saas": {
-    stakesHeading: "Standard stakes, but the exposure is broad",
     stakesExplanation:
       "A SaaS product's AI features usually touch every customer's data at scale, so small gaps in oversight show up across your whole customer base at once, not just one account.",
     sectorRisks: [
@@ -36,7 +36,6 @@ const FALLBACK_CONTENT = {
   },
 
   retail: {
-    stakesHeading: "Standard stakes, everyday customer contact",
     stakesExplanation:
       "Retail AI tools usually sit close to the customer, covering recommendations, chat, and loyalty offers, so problems tend to be visible to customers quickly rather than staying internal.",
     sectorRisks: [
@@ -47,7 +46,6 @@ const FALLBACK_CONTENT = {
   },
 
   "financial-services": {
-    stakesHeading: "High stakes: credit and risk decisions are named explicitly",
     stakesExplanation:
       "EU AI Act Recital 58 specifically names credit scoring and insurance risk assessment or pricing as high-risk uses of AI, so oversight here isn't optional good practice. It's what the law expects.",
     sectorRisks: [
@@ -58,7 +56,6 @@ const FALLBACK_CONTENT = {
   },
 
   healthcare: {
-    stakesHeading: "High stakes: patient data is a special category under GDPR",
     stakesExplanation:
       "GDPR Article 9 treats health data as a special category requiring extra protection, and Article 22(4) reinforces this specifically for automated decisions involving that kind of data.",
     sectorRisks: [
@@ -69,7 +66,6 @@ const FALLBACK_CONTENT = {
   },
 
   manufacturing: {
-    stakesHeading: "Standard stakes, mostly business contacts",
     stakesExplanation:
       "Manufacturing CRM data is often B2B, but the individual contacts behind those accounts, such as buyers and account managers, are still people protected by GDPR.",
     sectorRisks: [
@@ -80,7 +76,6 @@ const FALLBACK_CONTENT = {
   },
 
   hospitality: {
-    stakesHeading: "Standard stakes, but guest profiles can be sensitive",
     stakesExplanation:
       "Guest profiles in hospitality often include preferences, special requests, or dietary and accessibility notes that can indirectly reveal sensitive information.",
     sectorRisks: [
