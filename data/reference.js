@@ -10,15 +10,19 @@
  * this file was written.
  *
  * English only (no translation): everything in this file that is fixed,
- * identical text regardless of sector (the six interventions, the
- * Article 22 caveat, the customer notice, the disclaimer) is now
- * assembled directly by api/generate-guide.js in code, not requested
- * from the model at all. There is nothing left for the model to
- * transform on that content, so asking it to reproduce fixed text
- * verbatim would only add a chance of it drifting from the source with
- * no upside. The model's role is now limited to the parts that are
- * genuinely sector-specific and can't be pre-written: the stakes
- * heading, the stakes explanation, and the sector risk examples.
+ * identical text regardless of sector (the six interventions, the ten
+ * assessment questions, the Article 22 caveat, the customer notice, the
+ * disclaimer) is assembled directly in code, not requested from the
+ * model at all. api/generate-guide.js assembles the stakes-tier content
+ * (plus the fixed question list); api/score-assessment.js assembles the
+ * six interventions with their Met/Not Met status, computed by pure
+ * rule-based lookup against the SME's answers. There is nothing left for
+ * the model to transform on any of that content, so asking it to
+ * reproduce fixed text verbatim, or to score an assessment, would only
+ * add a chance of drifting from the source with no upside. The model's
+ * role is limited to the parts that are genuinely sector-specific and
+ * can't be pre-written: the stakes heading, the stakes explanation, and
+ * the sector risk examples.
  *
  * This same object also drives the hardcoded fallback content
  * (data/fallback-guides.js), so the "cached" and "live" paths are
@@ -157,8 +161,92 @@ const CUSTOMER_NOTICE =
 
 // Closing disclaimer. Identical across every guide by design, so it is
 // fixed content rather than something asked of the model each time.
+// "Tool" rather than "guide" here specifically: the output is now a
+// personalised, questionnaire-based report, not a single generic guide.
 const DISCLAIMER =
-  "This guide is a starting point for a conversation with your team and, where needed, a qualified advisor. It is not legal advice, not a compliance audit, and not a certification that your business meets any legal requirement.";
+  "This tool is a starting point for a conversation with your team and, where needed, a qualified advisor. It is not legal advice, not a compliance audit, and not a certification that your business meets any legal requirement.";
+
+// The ten-question required assessment. Fixed and pre-written, like
+// everything else in this file: the SME answers yes/no to each one, and
+// the answers drive the Met/Not Met status shown against each of the six
+// interventions below. No new legal content is added here beyond what
+// the six interventions already state; each question is simply the
+// checkable, concrete version of the practice its intervention already
+// describes. Where an intervention maps to more than one question
+// (vendor-responsibility, human-review, incident-plan), every mapped
+// question must be answered "yes" for that intervention to read "Met":
+// see statusForIntervention below.
+const ASSESSMENT_QUESTIONS = [
+  {
+    id: "q1",
+    interventionId: "vendor-responsibility",
+    text:
+      "Has your CRM vendor told you clearly whether your customer data is used to train their AI, shared with anyone else, or kept for a set period?",
+  },
+  {
+    id: "q2",
+    interventionId: "vendor-responsibility",
+    text: "Have you kept a record of what your vendor has told you about this?",
+  },
+  {
+    id: "q3",
+    interventionId: "data-record",
+    text: "Do you have a documented record of what customer data each AI feature uses, and why?",
+  },
+  {
+    id: "q4",
+    interventionId: "default-settings",
+    text:
+      "Have you checked which AI settings are turned on by default, and switched off anything you don't need?",
+  },
+  {
+    id: "q5",
+    interventionId: "human-review",
+    text: "Does a person review AI-generated content before it reaches a customer?",
+  },
+  {
+    id: "q6",
+    interventionId: "human-review",
+    text: "Do you review AI-generated content more thoroughly when it could seriously affect a customer?",
+  },
+  {
+    id: "q7",
+    interventionId: "pattern-check",
+    text:
+      "Does anyone in your business check, from time to time, whether the AI treats different groups of customers differently?",
+  },
+  {
+    id: "q8",
+    interventionId: "incident-plan",
+    text:
+      "Do you have a written plan for what to do if something goes wrong, including who is responsible for acting on it?",
+  },
+  {
+    id: "q9",
+    interventionId: "incident-plan",
+    text: "Does that plan cover notifying the relevant regulator within 72 hours if required?",
+  },
+  {
+    id: "q10",
+    interventionId: "incident-plan",
+    text: "Does everyone who'd need to act on that plan actually know it exists?",
+  },
+];
+
+// Deterministic scoring, computed in code: an intervention is "met" only
+// if every question mapped to it was answered "yes". A single "no" among
+// its mapped questions is enough to mark it "not-met", because a partly
+// followed practice (for example, a vendor DPA with no internal record of
+// it) is not the same as the practice actually being in place. This is
+// rule-based lookup against fixed data, not model reasoning: Claude is
+// never involved in scoring an assessment.
+function statusForIntervention(interventionId, answers) {
+  const mappedQuestions = ASSESSMENT_QUESTIONS.filter(
+    (q) => q.interventionId === interventionId
+  );
+  const allYes = mappedQuestions.every((q) => answers && answers[q.id] === true);
+  return allYes ? "met" : "not-met";
+}
 
 // Flag logic is deterministic and computed in code, not left to the model:
 // higher-stakes sectors flag every intervention "non-negotiable", standard
@@ -170,17 +258,20 @@ function flagForStakesTier(stakesTier) {
 }
 
 // Assembles the final six-item interventions array for a given stakes
-// tier. Used identically by the live path (api/generate-guide.js) and
-// the fallback path (data/fallback-guides.js) so the two can never
-// present different intervention content for the same sector.
-function buildInterventions(stakesTier) {
+// tier and set of assessment answers. Used by api/score-assessment.js,
+// the one place scoring happens, so there is a single implementation of
+// "what does Met/Not Met mean" that can never drift between sectors or
+// requests. answers is a map of question id to boolean (true = yes).
+function buildInterventions(stakesTier, answers) {
   const flag = flagForStakesTier(stakesTier);
   return INTERVENTIONS.map((item) => ({
+    id: item.id,
     title: item.title,
     body: item.body,
     suggestedPractice: item.suggestedPractice,
     citation: item.citation,
     flagLabel: flag,
+    status: statusForIntervention(item.id, answers),
   }));
 }
 
@@ -194,7 +285,9 @@ module.exports = {
   ARTICLE_22_CAVEAT,
   CUSTOMER_NOTICE,
   DISCLAIMER,
+  ASSESSMENT_QUESTIONS,
   flagForStakesTier,
+  statusForIntervention,
   buildInterventions,
   getSector,
 };

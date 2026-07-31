@@ -47,7 +47,7 @@ const FALLBACK_CONTENT = {
   },
 
   "financial-services": {
-    stakesHeading: "Higher stakes: credit and risk decisions are named explicitly",
+    stakesHeading: "High stakes: credit and risk decisions are named explicitly",
     stakesExplanation:
       "EU AI Act Recital 58 specifically names credit scoring and insurance risk assessment or pricing as high-risk uses of AI, so oversight here isn't optional good practice. It's what the law expects.",
     sectorRisks: [
@@ -58,7 +58,7 @@ const FALLBACK_CONTENT = {
   },
 
   healthcare: {
-    stakesHeading: "Higher stakes: patient data is a special category under GDPR",
+    stakesHeading: "High stakes: patient data is a special category under GDPR",
     stakesExplanation:
       "GDPR Article 9 treats health data as a special category requiring extra protection, and Article 22(4) reinforces this specifically for automated decisions involving that kind of data.",
     sectorRisks: [
