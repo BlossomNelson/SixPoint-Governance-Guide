@@ -1,35 +1,47 @@
 /**
  * api/generate-guide.js
  * ------------------------------------------------------------------
- * Vercel serverless function. This is the ONLY place the Anthropic API
- * key is used: it lives in process.env.ANTHROPIC_API_KEY, set in the
- * Vercel dashboard, and is never sent to or readable by the browser.
+ * Vercel serverless function, STAGE 1 OF 2. This is the ONLY place the
+ * Anthropic API key is used: it lives in process.env.ANTHROPIC_API_KEY,
+ * set in the Vercel dashboard, and is never sent to or readable by the
+ * browser.
+ *
+ * This stage returns only the sector's stakes-tier content (heading,
+ * explanation, risks) and the fixed ten-question assessment the SME
+ * must complete next. It deliberately does NOT return the six
+ * interventions, the customer notice, or the disclaimer: those depend
+ * on the SME's assessment answers (specifically, each intervention's
+ * Met/Not Met status), which don't exist yet at this stage. That
+ * personalised content is assembled by api/score-assessment.js, stage 2,
+ * once the assessment is submitted, with no Anthropic involvement at
+ * all.
  *
  * Two design decisions this file exists to enforce:
  *
  * 1. CONSTRAINED REASONING, NOT RECALL.
  *    Claude is not asked "what does GDPR say about X" and trusted to
  *    remember correctly. Every fixed legal fact (the six interventions
- *    and their citations, the Article 22 caveat, the customer notice,
- *    the disclaimer) lives in data/reference.js, a file a human has
- *    checked against primary sources, and is assembled directly by
- *    assembleGuide() below rather than asked of the model at all. The
- *    model's only job is the genuinely sector-specific part that can't
- *    be pre-written: the stakes heading, the stakes explanation, and
- *    2-3 sector risk examples, consistent with the fixed content it's
- *    given but never asked to reproduce that content itself. This is
- *    what makes the output's legal content independently checkable: it
- *    was checked before the model ever saw the request, and the model
- *    never gets a chance to alter it in transit.
+ *    and their citations, the assessment questions, the Article 22
+ *    caveat, the customer notice, the disclaimer) lives in
+ *    data/reference.js, a file a human has checked against primary
+ *    sources, and is assembled directly by assembleStakesContent()
+ *    below rather than asked of the model at all. The model's only job
+ *    is the genuinely sector-specific part that can't be pre-written:
+ *    the stakes heading, the stakes explanation, and 2-3 sector risk
+ *    examples, consistent with the fixed content it's given but never
+ *    asked to reproduce that content itself. This is what makes the
+ *    output's legal content independently checkable: it was checked
+ *    before the model ever saw the request, and the model never gets a
+ *    chance to alter it in transit.
  *
  * 2. A VERIFIED FALLBACK, ALWAYS.
  *    If the live call fails for any reason (network error, API outage,
  *    malformed response, timeout, or simply a missing API key), this
- *    function does not return an error. It runs the same assembleGuide()
- *    step over pre-written, pre-verified content from
- *    data/fallback-guides.js instead, flagged isFallback: true, so a
- *    live demo or an examiner's session never breaks because of
- *    infrastructure outside this project's control.
+ *    function does not return an error. It runs the same
+ *    assembleStakesContent() step over pre-written, pre-verified
+ *    content from data/fallback-guides.js instead, flagged
+ *    isFallback: true, so a live demo or an examiner's session never
+ *    breaks because of infrastructure outside this project's control.
  * ------------------------------------------------------------------
  */
 
@@ -37,9 +49,7 @@ const Anthropic = require("@anthropic-ai/sdk");
 const {
   SECTORS,
   ARTICLE_22_CAVEAT,
-  CUSTOMER_NOTICE,
-  DISCLAIMER,
-  buildInterventions,
+  ASSESSMENT_QUESTIONS,
   getSector,
 } = require("../data/reference");
 const { getFallbackContent } = require("../data/fallback-guides");
@@ -52,9 +62,9 @@ const MODEL = process.env.ANTHROPIC_MODEL || "claude-opus-5";
 // The strict JSON schema the model's response is validated against.
 // This is deliberately small: stakesHeading, stakesExplanation, and
 // sectorRisks are the only content that genuinely needs live,
-// sector-specific writing. Everything else in a guide is fixed and
-// assembled in code (see assembleGuide below), so there is nothing
-// else for the model to be asked for.
+// sector-specific writing. Everything else in this stage's output is
+// fixed and assembled in code (see assembleStakesContent below), so
+// there is nothing else for the model to be asked for.
 const OUTPUT_SCHEMA = {
   type: "object",
   properties: {
@@ -99,13 +109,17 @@ Respond only with the structured JSON output. Do not add commentary outside the 
 }
 
 /**
- * Assembles a complete guide from the sector and whatever sector-specific
- * content is supplied (either the model's parsed response, or the
- * hand-written fallback content for the sector). Every field that isn't
- * sector-specific prose comes straight from data/reference.js, so the
- * live and fallback paths can never disagree on fixed content.
+ * Assembles the stage-1 stakes content from the sector and whatever
+ * sector-specific content is supplied (either the model's parsed
+ * response, or the hand-written fallback content for the sector). Every
+ * field that isn't sector-specific prose comes straight from
+ * data/reference.js, so the live and fallback paths can never disagree
+ * on fixed content. The six interventions, customer notice, and
+ * disclaimer are not included here: they depend on the assessment
+ * answers collected after this stage, and are assembled by
+ * api/score-assessment.js instead.
  */
-function assembleGuide(sector, sectorContent) {
+function assembleStakesContent(sector, sectorContent) {
   return {
     sector: sector.label,
     stakesTier: sector.stakesTier,
@@ -113,9 +127,10 @@ function assembleGuide(sector, sectorContent) {
     stakesExplanation: sectorContent.stakesExplanation,
     sectorRisks: sectorContent.sectorRisks,
     article22Caveat: ARTICLE_22_CAVEAT,
-    interventions: buildInterventions(sector.stakesTier),
-    customerNotice: CUSTOMER_NOTICE,
-    disclaimer: DISCLAIMER,
+    assessmentQuestions: ASSESSMENT_QUESTIONS.map((q) => ({
+      id: q.id,
+      text: q.text,
+    })),
   };
 }
 
@@ -177,18 +192,18 @@ module.exports = async (req, res) => {
     }
 
     const sectorContent = JSON.parse(textBlock.text);
-    const guide = assembleGuide(sector, sectorContent);
+    const stakesContent = assembleStakesContent(sector, sectorContent);
 
-    res.status(200).json({ ...guide, isFallback: false });
+    res.status(200).json({ ...stakesContent, isFallback: false });
   } catch (err) {
     // eslint-disable-next-line no-console
     console.error("Live generation failed, serving fallback guide:", err.message);
 
     const fallbackContent = getFallbackContent(sector.id);
-    const guide = assembleGuide(sector, fallbackContent);
+    const stakesContent = assembleStakesContent(sector, fallbackContent);
 
     res.status(200).json({
-      ...guide,
+      ...stakesContent,
       isFallback: true,
       fallbackNote:
         "We couldn't reach the live guide generator, so you're seeing a pre-verified cached version. Everything below has been checked against the same sources as the live guide.",
