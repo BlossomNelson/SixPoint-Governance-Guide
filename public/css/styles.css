@@ -380,16 +380,24 @@ p {
   margin-bottom: 8px;
 }
 
-/* The fixed, unelaborated GDPR Art. 22 line: quiet on purpose, the
-   same visual weight as the closing disclaimer (.footer-disclaimer),
-   not a callout competing with the stakes explanation or the six
-   interventions. It's a caveat that applies regardless of what the
-   rest of the screen says, so it sits at the bottom, set apart only
-   by a thin divider, not a bordered box. */
+/* The fixed, unelaborated GDPR Art. 22 line: its own small, tinted
+   box, the same soft secondary-tint treatment as the "Tell your
+   customers" block (.customer-notice-block) but noticeably smaller and
+   plainer (no heading, tighter padding, smaller text), since it's one
+   caveat sentence, not a section. It's a caveat that applies regardless
+   of what the rest of the stakes page says, so it reads as clearly
+   separate from the stakes explanation and risks above it, not a
+   callout competing with them. */
 .caveat-block {
   margin-top: 32px;
-  padding-top: 20px;
-  border-top: 1px solid var(--color-border);
+  background: var(--color-tint);
+  border-radius: var(--radius-md);
+  padding: 16px 20px;
+}
+
+.caveat-block p {
+  margin: 0;
+  max-width: 62ch;
 }
 
 /* ---------- Assessment ---------- */
@@ -604,12 +612,13 @@ p {
 
 /* A quiet note, not a headline: small, italic, muted, read as a
    footnote, not a page element competing with the actual content.
-   Shared by the closing disclaimer on the guide screen (inside
-   .disclaimer-block) and the Article 22 caveat on the stakes screen
-   (inside .caveat-block), so both read at the same restrained visual
-   weight. There is no page-wide footer: repeating either on every
-   screen reads as noise, and risks being skimmed past everywhere
-   rather than read once where it matters. */
+   Used by the closing disclaimer on the guide screen (inside
+   .disclaimer-block) and, inside its own tinted .caveat-block box, the
+   Article 22 caveat on the stakes screen: the italic/muted treatment
+   here is shared, the surrounding block is not. There is no page-wide
+   footer: repeating either on every screen reads as noise, and risks
+   being skimmed past everywhere rather than read once where it
+   matters. */
 .footer-disclaimer {
   margin: 0;
   color: var(--color-ink-soft);
