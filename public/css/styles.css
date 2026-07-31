@@ -24,6 +24,12 @@
   --color-accent-ink: #ffffff;
   --color-higher: #e8471f;
   --color-standard: #17140f;
+  /* A soft, secondary tint for content that should read as smaller and
+     quieter than the main surface cards (currently: the "Tell your
+     customers" block). Distinct from both --color-bg and
+     --color-surface, so it neither disappears into the page nor
+     competes with the white intervention cards. */
+  --color-tint: #f6ede3;
 
   --font-serif: "Fraunces", ui-serif, Georgia, serif;
   --font-body: "Inter", -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
@@ -408,6 +414,65 @@ p {
   border-top: 1px solid var(--color-border);
 }
 
+/* ---------- Assessment ---------- */
+
+.assessment-list {
+  list-style: none;
+  padding: 0;
+  margin: 24px 0 40px;
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+
+.assessment-item {
+  background: var(--color-surface);
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-md);
+  padding: 18px 20px;
+  box-shadow: var(--shadow-card);
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 16px;
+  flex-wrap: wrap;
+}
+
+.assessment-question {
+  margin: 0;
+  flex: 1 1 320px;
+}
+
+.assessment-answers {
+  display: flex;
+  gap: 8px;
+  flex-shrink: 0;
+}
+
+.answer-btn {
+  font-family: var(--font-body);
+  font-size: 0.9rem;
+  font-weight: 600;
+  cursor: pointer;
+  padding: 8px 20px;
+  border-radius: var(--radius-sm);
+  background: transparent;
+  color: var(--color-ink);
+  border: 1px solid var(--color-border);
+  transition: border-color 180ms var(--ease-standard), background-color 180ms var(--ease-standard),
+    color 180ms var(--ease-standard);
+}
+
+.answer-btn:hover {
+  border-color: var(--color-ink);
+}
+
+.answer-btn.selected {
+  background: var(--color-accent);
+  color: var(--color-accent-ink);
+  border-color: var(--color-accent);
+}
+
 /* ---------- Interventions ---------- */
 
 .intervention-card {
@@ -473,6 +538,23 @@ p {
   border: 1px solid var(--color-border);
 }
 
+/* Personalised per-intervention result, from the SME's own assessment
+   answers. "Not met" is the actionable one, so it gets the solid accent
+   treatment; "Met" is a quiet confirmation and stays outlined, the same
+   restrained treatment as .flag-worthdoing above, so a fully "Met"
+   guide doesn't read as a wall of colour. */
+.badge-status.status-not-met {
+  background: var(--color-accent);
+  color: var(--color-accent-ink);
+  border: 1px solid var(--color-accent);
+}
+
+.badge-status.status-met {
+  background: transparent;
+  color: var(--color-ink-soft);
+  border: 1px solid var(--color-border);
+}
+
 .intervention-body {
   margin-bottom: 10px;
 }
@@ -491,18 +573,30 @@ p {
 
 /* ---------- Tell your customers ---------- */
 
-/* Brief advice, not a quote to copy: plain prose under its own
-   heading, set apart from the interventions above by a divider, same
-   treatment the old blockquote box no longer needs since there's
-   nothing here meant to be lifted verbatim. */
+/* Brief advice, not a quote to copy: plain prose in its own tinted
+   block, visually smaller and quieter than the six white intervention
+   cards above so it reads as secondary, not a seventh point competing
+   with the guide itself. The tint (--color-tint) is deliberately its
+   own colour, distinct from both the page background and the card
+   surface, so this block is legible as a separate, lower-priority
+   region at a glance. */
 .customer-notice-block {
-  margin-top: 56px;
-  border-top: 1px solid var(--color-border);
-  padding-top: 40px;
+  margin-top: 40px;
+  background: var(--color-tint);
+  border-radius: var(--radius-md);
+  padding: 24px;
+}
+
+.customer-notice-block h3 {
+  font-size: 1rem;
+  margin: 0 0 8px;
 }
 
 .customer-notice-block p {
   max-width: 62ch;
+  font-size: 0.92rem;
+  color: var(--color-ink-soft);
+  margin: 0;
 }
 
 /* ---------- Disclaimer / actions ---------- */
@@ -555,6 +649,20 @@ p {
 
   .intervention-head {
     flex-direction: column;
+  }
+
+  .assessment-item {
+    flex-direction: column;
+    align-items: stretch;
+  }
+
+  .assessment-answers {
+    justify-content: stretch;
+  }
+
+  .assessment-answers .answer-btn {
+    flex: 1 1 0;
+    text-align: center;
   }
 
   .actions-block {
