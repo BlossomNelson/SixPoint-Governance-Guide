@@ -9,21 +9,22 @@
  * This stage returns only the sector's stakes-tier content (a fixed
  * headline, a short live-written explanation, and 2-3 sector risks) and
  * the fixed ten-question assessment the SME must complete next. It
- * deliberately does NOT return the six interventions, the customer
- * notice, or the disclaimer: those depend on the SME's assessment
- * answers (specifically, each intervention's Met/Not Met status), which
- * don't exist yet at this stage. That personalised content is assembled
- * by api/score-assessment.js, stage 2, once the assessment is submitted,
- * with no Anthropic involvement at all.
+ * deliberately does NOT return the recommendation list, the customer
+ * notice, or the disclaimer: the recommendation list depends on the
+ * SME's assessment answers (one recommendation per question answered
+ * "no", nothing else), which don't exist yet at this stage. That
+ * personalised content is assembled by api/score-assessment.js, stage 2,
+ * once the assessment is submitted, with no Anthropic involvement at
+ * all.
  *
  * Two design decisions this file exists to enforce:
  *
  * 1. CONSTRAINED REASONING, NOT RECALL.
  *    Claude is not asked "what does GDPR say about X" and trusted to
- *    remember correctly. Every fixed legal fact (the six interventions
- *    and their citations, the assessment questions, the stakes headline,
- *    the Article 22 caveat, the customer notice, the disclaimer) lives
- *    in data/reference.js, a file a human has checked against primary
+ *    remember correctly. Every fixed legal fact (the ten assessment
+ *    questions and their recommendation text, the stakes headline, the
+ *    Article 22 caveat, the customer notice, the disclaimer) lives in
+ *    data/reference.js, a file a human has checked against primary
  *    sources, and is assembled directly by assembleStakesContent()
  *    below rather than asked of the model at all. The model's only job
  *    is the genuinely sector-specific part that can't be pre-written:
@@ -91,11 +92,11 @@ const OUTPUT_SCHEMA = {
 function buildSystemPrompt(sector) {
   const stakesGrounding = sector.stakesGrounding
     ? `Legal grounding: ${sector.stakesGrounding}`
-    : "Standard-stakes sector: no elevated legal grounding beyond the six fixed governance interventions applies.";
+    : "Standard-stakes sector: no elevated legal grounding beyond the fixed assessment questions applies.";
 
   return `You write the sector-specific part of a short AI governance report for one SME sector, for a non-technical reader. English only.
 
-Do not recall or interpret GDPR/EU AI Act content yourself, and do not write or restate the six governance interventions (vendor accountability, a data processing record, default settings, human review, pattern/fairness checks, incident response), the Article 22 note, the customer notice, or the disclaimer: those are fixed and added by the app, not you. Do not invent legal obligations or citations.
+Do not recall or interpret GDPR/EU AI Act content yourself, and do not write or restate the assessment questions, their recommendations (covering vendor accountability, a data processing record, default settings, human review, pattern/fairness checks, incident response), the Article 22 note, the customer notice, or the disclaimer: those are fixed and added by the app, not you. Do not invent legal obligations or citations.
 
 SECTOR: ${sector.label}
 STAKES TIER: ${sector.stakesTier} (${stakesGrounding})
@@ -113,7 +114,7 @@ Respond only with the structured JSON output.`;
  * response, or the hand-written fallback content for the sector). Every
  * field that isn't sector-specific prose comes straight from
  * data/reference.js, so the live and fallback paths can never disagree
- * on fixed content. The six interventions, customer notice, and
+ * on fixed content. The recommendation list, customer notice, and
  * disclaimer are not included here: they depend on the assessment
  * answers collected after this stage, and are assembled by
  * api/score-assessment.js instead.

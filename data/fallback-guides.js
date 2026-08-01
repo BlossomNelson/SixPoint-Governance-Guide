@@ -14,8 +14,8 @@
  * Scope: this file now stores exactly the two fields the live model is
  * asked for (stakesExplanation, sectorRisks), one set per sector,
  * hand-written and checked against primary sources. It deliberately does
- * not duplicate the six interventions, the ten assessment questions, the
- * stakes headline, the Article 22 caveat, the customer notice, or the
+ * not duplicate the ten assessment questions, their recommendation text,
+ * the stakes headline, the Article 22 caveat, the customer notice, or the
  * disclaimer: those are fixed, identical content assembled from
  * data/reference.js by api/generate-guide.js for both the live and
  * fallback paths, so there is only one place that content can ever be
