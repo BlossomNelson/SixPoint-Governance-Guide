@@ -321,7 +321,7 @@
     const url = URL.createObjectURL(blob);
     const a = document.createElement("a");
     a.href = url;
-    a.download = `sixpoint-guide-${state.sectorId}.txt`;
+    a.download = `sixpoint-report-${state.sectorId}.txt`;
     document.body.appendChild(a);
     a.click();
     document.body.removeChild(a);
