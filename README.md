@@ -1,394 +1,349 @@
-# SixPoint, Know Where Your CRM's AI Stands
+# SixPoint
 
-SixPoint is a practical deliverable for an MSc thesis on AI governance
-tooling for SMEs. A user picks a business sector, answers a fixed
-ten-question yes/no assessment, and SixPoint returns a short, personalised
-report: one recommendation per question they answered "no" to, each
-grounded in a specific GDPR or EU AI Act citation, and nothing for
-questions they answered "yes" to. There is no six-item grouping in the
-output; each recommendation stands on its own, tied only to the question
-that produced it. English only, in this version.
-
-This document is the architecture reference for the project's Configuration
-Manual: what each part does, why it's built that way, how to run it locally,
-and how it deploys.
+A static frontend plus two Vercel serverless functions. A user picks one of six
+fixed business sectors, answers a required ten-question yes/no assessment, and
+receives a flat, per-question recommendation list: one entry per question
+answered "no", nothing for questions answered "yes", each with a citation. The
+report can be downloaded as a PDF.
 
 ## Contents
 
 - [Architecture](#architecture)
-- [The core design decision: constrained reasoning, not recall](#the-core-design-decision-constrained-reasoning-not-recall)
-- [The reliability design decision: a verified fallback, always](#the-reliability-design-decision-a-verified-fallback-always)
-- [Performance: what's actually tunable, and the practical floor](#performance-whats-actually-tunable-and-the-practical-floor)
-- [Downloading the report as a PDF](#downloading-the-report-as-a-pdf)
+- [Data model](#data-model)
+- [API reference](#api-reference)
+- [Frontend state machine](#frontend-state-machine)
+- [PDF generation](#pdf-generation)
+- [Fallback behaviour](#fallback-behaviour)
 - [Project structure](#project-structure)
 - [Running locally](#running-locally)
+- [Environment variables](#environment-variables)
 - [Deploying](#deploying)
-- [Testing the fallback path](#testing-the-fallback-path)
-- [Content scope and limitations](#content-scope-and-limitations)
+- [Design system](#design-system)
+- [Known limitations](#known-limitations)
 
 ## Architecture
 
 ```
-   Browser (public/)              Vercel serverless functions         Anthropic API
-  +------------------+   POST    +------------------------------+     +-----------+
-  | index.html       | --------> | api/generate-guide.js        | --> | Claude    |
-  | css/styles.css    |          | (stage 1: stakes content)    |     | (Messages |
-  | js/app.js          | <------ |                              | <-- |  API)     |
-  | js/sector-data.js   |  JSON  +------------------------------+ JSON +-----------+
-  |                    |   POST   +------------------------------+
-  |                    | -------> | api/score-assessment.js      |
-  |                    | <------  | (stage 2: deterministic,     |
-  |                    |   JSON   |  flat recommendation list)   |
-  +------------------+           +------------------------------+
-                                  data/reference.js, data/fallback-guides.js
-                                  (both functions read from these)
+Browser (public/)                 Vercel serverless functions        Anthropic API
++-------------------+   POST     +------------------------------+   +-----------+
+| index.html        | ---------> | api/generate-guide.js        |-->| Claude    |
+| css/styles.css     |           | (stage 1: stakes content)    |   | Messages  |
+| js/app.js           | <------- |                              |<--| API       |
+| js/sector-data.js    |  JSON   +------------------------------+   +-----------+
+|                     |   POST   +------------------------------+
+|                     | -------> | api/score-assessment.js      |
+|                     | <------  | (stage 2: recommendation     |
+|                     |   JSON   |  scoring, no Anthropic call) |
++-------------------+            +------------------------------+
+                                  both read data/reference.js
 ```
 
-- **Static frontend** (`public/`): plain HTML/CSS/JS, no framework. A
-  seven-state client-side app (landing → picker → loading → stakes →
-  assessment → guide, plus error) that calls two backend endpoints in
-  sequence and renders whatever it gets back.
-- **Two serverless functions**:
-  - `api/generate-guide.js` (stage 1): the only place
-    `ANTHROPIC_API_KEY` is read, and the only place this app depends on
-    Anthropic at all. Returns the sector's stakes-tier content (heading,
-    explanation, risks) plus the fixed ten-question assessment.
-  - `api/score-assessment.js` (stage 2): takes the SME's ten answers and
-    returns a flat recommendation list, one entry per question answered
-    "no" (nothing for questions answered "yes"), plus the customer
-    notice and disclaimer. If every question was "yes", the list is
-    empty and a single fixed confirmation message is returned instead.
-    Pure, deterministic rule-based lookup against `data/reference.js`,
-    no Anthropic call and no fallback path, because there's nothing in
-    it that can fail the way a live model call can.
-- **Two data files** (`data/reference.js`, `data/fallback-guides.js`): the
-  single source of truth for every legal fact the app uses. See below.
-- **GitHub to Vercel**: deployment is push-triggered. There is no manual
-  `vercel deploy` step in normal use; see [Deploying](#deploying).
+- `public/`: static HTML/CSS/JS, no framework, no build step.
+- `api/generate-guide.js`: the only place `ANTHROPIC_API_KEY` is read. Returns
+  sector-specific stakes content plus the fixed assessment question list.
+- `api/score-assessment.js`: takes the ten answers, returns the recommendation
+  list. Pure function of `data/reference.js` plus the request body; no
+  Anthropic call, no fallback path, and no way for it to fail except a 400 on
+  a malformed request.
+- `data/reference.js`, `data/fallback-guides.js`: the only source of legal
+  content (citations, recommendation text, fixed disclaimers). Both API
+  functions read from `data/reference.js`; `data/fallback-guides.js` supplies
+  stage 1's fallback path.
+- Deployment is push-triggered from GitHub via Vercel; no `vercel deploy` step
+  in normal use.
 
-## The core design decision: constrained reasoning, not recall
+### Why the model only ever writes two fields
 
-The brief for this tool is unusual for an LLM app: the legal content has to
-be **independently verifiable**, not just plausible. That rules out asking
-Claude "what does GDPR say about vendor data processing?" and trusting the
-answer: a model's recall of a specific article number is exactly the kind
-of thing that can't be checked without redoing the research anyway.
+`api/generate-guide.js`'s `OUTPUT_SCHEMA` constrains Claude's structured
+output to exactly `stakesExplanation` (one sentence) and `sectorRisks` (2-3
+short bullets). Every other field in a report (the ten assessment questions,
+their recommendation text and citations, the stakes headline, the Article 22
+caveat, the customer notice, the disclaimer) is fixed data in
+`data/reference.js`, assembled in code, and never sent to or requested from
+the model. The system prompt in `buildSystemPrompt()` explicitly tells the
+model not to write or restate any of that fixed content.
 
-Instead, `data/reference.js` holds every fixed fact the app uses (the ten
-assessment questions and their per-question recommendation text and
-citations, the six sectors and their stakes tiers, the GDPR Article 22
-caveat, the closing customer-notice advice, and the disclaimer), all
-written and checked against primary sources **before** any code was
-written, by a human, once. Since this version is English only, there is no
-translation step left for the model to perform on that fixed content, so it
-isn't asked to reproduce any of it. `assembleStakesContent()` in
-`api/generate-guide.js` builds the stage-1 fields directly from
-`data/reference.js` in code, for both the live and fallback paths.
+Recommendation selection is likewise not a model decision:
+`buildRecommendations(answers)` in `data/reference.js` is a pure filter over
+the ten fixed questions (`answers[q.id] === true` or not); Claude is never
+in that code path at all.
 
-That leaves exactly two fields that are genuinely sector-specific and can't
-be pre-written: `stakesExplanation` and `sectorRisks`. Those are the only
-fields in the model's `OUTPUT_SCHEMA`, and the only fields the fallback
-content in `data/fallback-guides.js` stores per sector. Structured outputs
-(`output_config.format`) constrain the model's response to exactly that
-schema, so there's no free-form prose for the frontend to parse and hope
-matches, and no way for the model to smuggle in an extra field it wasn't
-asked for.
+## Data model
 
-The stakes page's opening headline (sector name, stakes level, and a
-one-line reason, e.g. "HEALTHCARE SECTOR - HIGH STAKE. You handle sensitive
-data.") is fixed content too, not a third model field: `buildStakesHeadline()`
-in `data/reference.js` assembles it from `sector.label`, `sector.stakesTier`,
-and a pre-written `sector.stakesReason`, all fixed per sector.
+All fixed content lives in `data/reference.js`.
 
-The **recommendation list is flat and answer-specific, not grouped or
-generic.** Each of the ten assessment questions has its own fixed
-`{ text, citation }` entry in the `QUESTION_RECOMMENDATIONS` object in
-`data/reference.js`. `buildRecommendations(answers)` filters the ten
-questions down to whichever ones were answered "no" and maps each to its
-fixed recommendation, in question order; a question answered "yes"
-contributes nothing to the output. There is no intervention-level
-grouping anywhere in this file or in the report: a report showing
-exactly the questions the SME answered "no" to (and nothing else) is a
-direct, traceable consequence of that filter, not a summary or a rollup.
-If every question was answered "yes", `buildRecommendations` returns an
-empty array, and the app shows the fixed `ALL_MET_MESSAGE` instead of an
-empty report.
+| Export | Shape | Used by |
+|---|---|---|
+| `SECTORS` | `[{ id, label, stakesTier: "standard"\|"higher", stakesReason, stakesGrounding? }]`, 6 entries | `getSector()`, `buildStakesHeadline()` |
+| `ASSESSMENT_QUESTIONS` | `[{ id: "q1".."q10", text }]` | both API functions, assessment screen |
+| `QUESTION_RECOMMENDATIONS` | `{ [questionId]: { text, citation } }`, one entry per question id | `buildRecommendations()` |
+| `ALL_MET_MESSAGE` | fixed string | returned when every answer is `true` |
+| `ARTICLE_22_CAVEAT` | `{ text, citation }` | stakes screen |
+| `CUSTOMER_NOTICE` | fixed string | report screen, PDF |
+| `DISCLAIMER` | fixed string | report screen, PDF |
 
-The net effect: if an examiner asks "how do you know the model didn't just
-make up a citation, water down the Article 22 caveat, or decide which
-recommendations apply," the answer is that it structurally can't. None of
-that is ever sent to the model to generate, transform, or decide; all of
-it is assembled or computed from `data/reference.js` after the model's
-response (or the fallback content) comes back. The model's only role is
-writing three sector-specific sentences within the frame that fixed
-content sets, not producing, reproducing, or selecting any legal claim
-itself.
+Functions:
 
-## The reliability design decision: a verified fallback, always
+- `getSector(sectorId)`: lookup by id, `null` if not found.
+- `buildStakesHeadline(sector)`: returns e.g. `"HEALTHCARE SECTOR - HIGH STAKE. You handle sensitive data."` for a `stakesTier: "higher"` sector, or `"RETAIL SECTOR. You handle everyday customer data."` (no flag) for `"standard"`.
+- `buildRecommendations(answers)`: `answers` is `{ [questionId]: boolean }`. Returns `ASSESSMENT_QUESTIONS` filtered to entries where `answers[id] !== true`, mapped to `{ questionId, question, text, citation }`. Empty array if every answer is `true`.
 
-A live demo or an examiner's session should never fail because of a network
-blip, a rate limit, or an Anthropic API outage. `api/generate-guide.js`
-wraps the entire live-generation path, including the case where
-`ANTHROPIC_API_KEY` is missing, in a single `try/catch`. On **any**
-failure, it runs the same `assembleStakesContent()` step over the
-pre-written content in `data/fallback-guides.js` instead of returning an
-error, with `isFallback: true` and a short, honest note the frontend
-renders as a banner ("Showing a cached version").
+There is no grouping structure above the individual question. A prior version
+of this app grouped the ten questions into six "interventions" with a
+Met/Not-Met status per group; that model was removed (see CHANGELOG.md) in
+favour of the flat per-question list above.
 
-Because `assembleStakesContent()` is the single place that turns
-sector-specific content plus the fixed reference block into stage-1
-content, the live and fallback paths physically cannot present a different
-Article 22 caveat or assessment question list for the same sector. The
-only thing that can differ between them is the three sector-specific
-sentences, live-written by the model versus hand-written in
-`data/fallback-guides.js`, checked against the same sources.
+`data/fallback-guides.js` exports `FALLBACK_CONTENT`, keyed by sector id, each
+entry `{ stakesExplanation, sectorRisks }`, the same two fields Claude is
+asked to write, hand-written once and checked against the sources named in
+`stakesGrounding`.
 
-The recommendation list, the customer notice, and the disclaimer go
-further still: `api/score-assessment.js` never calls Anthropic at all, so
-that content keeps working exactly the same way even if the Anthropic API
-is completely unreachable. The only part of a report that depends on a
-live model call is the stage-1 stakes content; the personalised
-recommendation list itself does not.
+## API reference
 
-See [Testing the fallback path](#testing-the-fallback-path) for how this
-was verified.
+### `POST /api/generate-guide`
 
-## Performance: what's actually tunable, and the practical floor
+Request:
+```json
+{ "sectorId": "healthcare" }
+```
 
-The one live network dependency in this app is `api/generate-guide.js`
-(stage 1). Three real levers were tightened there:
+Response (200):
+```json
+{
+  "sector": "Healthcare",
+  "stakesTier": "higher",
+  "stakesHeadline": "HEALTHCARE SECTOR - HIGH STAKE. You handle sensitive data.",
+  "stakesExplanation": "...",
+  "sectorRisks": ["...", "...", "..."],
+  "article22Caveat": { "text": "...", "citation": "GDPR Art. 22" },
+  "assessmentQuestions": [{ "id": "q1", "text": "..." }, ...],
+  "isFallback": false
+}
+```
 
-- **Model**: defaults to `claude-haiku-4-5-20251001`, not a larger model.
-  The task is two short, tightly-schema-constrained fields (one sentence,
-  2-3 short phrases), consistent with fixed content it's given but never
-  asked to reason about independently: a fast model is the right fit, not
-  a slower, more capable one.
-- **System prompt**: trimmed to the constraint, the sector context, and
-  the two output fields, nothing else. Fewer input tokens on every
-  request.
-- **`max_tokens`**: reduced from 2048 to 300. The real output rarely
-  exceeds a couple hundred tokens; this mainly caps a worst-case runaway
-  response rather than acting as a first-order speed lever, since the
-  model stops naturally once it's written the two fields regardless of
-  the ceiling.
+On any failure (missing `ANTHROPIC_API_KEY`, network error, malformed model
+response) the same shape is returned instead with `stakesExplanation` and
+`sectorRisks` taken from `data/fallback-guides.js`, plus `isFallback: true`
+and a `fallbackNote` string. Response status is 200 either way; the endpoint
+never returns 5xx for a live-generation failure.
 
-**Honestly, the practical floor:** none of the above eliminates a live
-network round trip to Anthropic's API plus inference time, and Vercel
-serverless functions that haven't run recently can add a cold-start
-delay of a few hundred milliseconds to a couple of seconds on top of
-that. Even fully optimised, a live request realistically lands somewhere
-in the low single-digit seconds, not instant. Removing the intermediate
-"generate" click (see below) doesn't change this floor: it removes a
-decision point for the user, not backend work, since the same live-or-fallback
-call still has to complete before the stakes page can render. The
-fallback path (see above) has no such floor: once a live call fails or
-times out, the fallback content renders immediately, and stage 2
-(`api/score-assessment.js`) never depends on Anthropic at all.
+Returns 400 with `{ error, validSectors }` for an unknown `sectorId`.
+Returns 405 for any method other than POST.
 
-## Downloading the report as a PDF
+### `POST /api/score-assessment`
 
-"Download your report" builds a PDF entirely client-side, using
-[jsPDF](https://github.com/parallax/jsPDF), loaded from a CDN
-(`public/index.html`) with no backend change and no report content ever
-leaving the browser to produce the file: `buildReportPdf()` in
-`public/js/app.js` lays out a title, sector, stakes level, and
-generation date, followed by exactly the same content the report screen
-itself shows: the flat recommendation list (each item with its
-originating question and citation), the customer notice, and the
-disclaimer in smaller text at the bottom, paginating automatically via a
-single `ensureSpace()` check before every line. The PDF deliberately
-does not recap the stakes explanation or sector risks: that content
-belongs to the stakes screen, shown earlier in the flow, and repeating
-it here would duplicate content that isn't specific to this SME's
-answers, and would push most reports past one page for no reason.
+Request:
+```json
+{
+  "sectorId": "healthcare",
+  "answers": { "q1": true, "q2": false, "q3": true, ..., "q10": true }
+}
+```
 
-jsPDF ships three built-in ("core") fonts with no embedding step:
-Helvetica, Times, and Courier. The design system otherwise stands on
-Fraunces, Inter, and IBM Plex Mono, which aren't among them, so the PDF
-approximates rather than exactly reproduces the on-screen look: Times
-stands in for Fraunces on headings, Helvetica for Inter in body text,
-and Courier for IBM Plex Mono on citation labels. Colours transfer
-exactly, not approximately: the PDF's ink, soft-ink, and accent colours
-are the same RGB values as `--color-ink`, `--color-ink-soft`, and
-`--color-accent` in `styles.css`.
+All ten `q1`..`q10` keys are required, each a boolean.
+
+Response (200):
+```json
+{
+  "recommendations": [
+    { "questionId": "q2", "question": "...", "text": "...", "citation": "GDPR Art. 28" }
+  ],
+  "allMet": false,
+  "allMetMessage": "Based on your answers, you're meeting all ten checks in this assessment.",
+  "customerNotice": "...",
+  "disclaimer": "..."
+}
+```
+
+`recommendations` is empty and `allMet: true` when every answer is `true`;
+`allMetMessage` is present either way.
+
+Returns 400 with `{ error, validSectors }` for an unknown `sectorId`.
+Returns 400 with `{ error, missingQuestionIds }` if any of `q1`..`q10` is
+missing or not a boolean. Returns 405 for any method other than POST.
+
+This endpoint has no Anthropic dependency and no try/catch fallback path: it
+is a pure function of `data/reference.js` and the request body.
+
+## Frontend state machine
+
+`public/js/app.js` is a single IIFE with no framework. Client state:
+
+```js
+state = { sectorId: null, guide: null, answers: {} }
+```
+
+`state.guide` starts as the response from `/api/generate-guide` and is
+extended in place with `recommendations`, `allMet`, `allMetMessage`,
+`customerNotice`, `disclaimer` once `/api/score-assessment` responds.
+
+Views (`public/index.html` section ids, toggled via `showView()`):
+
+| View | Element id | Entered from |
+|---|---|---|
+| landing | `view-landing` | initial |
+| picker | `view-picker` | `start-btn` |
+| loading | `view-loading` | sector card click, "Generate your report" |
+| stakes | `view-stakes` | `/api/generate-guide` response |
+| assessment | `view-assessment` | "Continue to quick assessment" |
+| guide (report) | `view-guide` | `/api/score-assessment` response |
+| error | `view-error` | either fetch throwing |
+
+Selecting a sector card calls `generateGuide()` immediately; there is no
+separate confirmation step between picking a sector and the stage-1 request
+firing. `retryAction` tracks whichever of `generateGuide` /
+`submitAssessment` most recently ran, so the error screen's retry button
+resumes the failed stage rather than restarting the whole flow.
+
+## PDF generation
+
+"Download your report" (`downloadGuide()` in `app.js`) builds a PDF
+client-side with [jsPDF](https://github.com/parallax/jsPDF), loaded from a
+CDN in `public/index.html` (`https://cdn.jsdelivr.net/npm/jspdf@2.5.1/...`).
+No backend involvement.
+
+`buildReportPdf(guide)` lays out, on one A4 page in the normal case:
+title, sector, stakes level, generation date, then exactly the same content
+the report screen shows: the recommendation list (or `allMetMessage`), the
+customer notice, and the disclaimer. It does not include the stakes
+explanation or sector risks; that content is specific to the stakes screen,
+shown earlier in the flow, not to the assessment's output. Pagination is a
+single `ensureSpace(height)` check before every text line; a full
+ten-recommendation report spans two pages without splitting an item across
+the break.
+
+Font mapping (jsPDF's three core fonts, no embedding step):
+
+| Site font | PDF font |
+|---|---|
+| Fraunces (headings) | Times, bold |
+| Inter (body) | Helvetica |
+| IBM Plex Mono (citations) | Courier, bold |
+
+Colour values are exact matches to `styles.css`, not approximations:
+`PDF_COLORS.ink = [23,20,15]` (`--color-ink`), `.inkSoft = [74,70,63]`
+(`--color-ink-soft`), `.accent = [232,71,31]` (`--color-accent`),
+`.border = [221,217,209]` (`--color-border`).
+
+## Fallback behaviour
+
+`api/generate-guide.js` wraps the Anthropic call (including the case where
+`ANTHROPIC_API_KEY` is unset) in one try/catch. On any failure it runs
+`assembleStakesContent()` over `data/fallback-guides.js` instead of the
+model's response and returns 200 with `isFallback: true`. The frontend shows
+a banner ("Showing a cached version") and renders normally otherwise.
+
+`api/score-assessment.js` has no equivalent fallback because it has no
+external dependency to fail: `buildRecommendations()` only reads
+`data/reference.js` and the validated request body.
+
+To force the fallback path locally: unset `ANTHROPIC_API_KEY`, or run
+`vercel dev` without a `.env` file. The function's own key check throws
+before any network call is attempted.
 
 ## Project structure
 
 ```
 api/
-  generate-guide.js       Stage 1: builds the system prompt, calls Claude
-                           with a structured-output schema, assembles the
-                           stakes content and question list, falls back
-                           on any failure.
-  score-assessment.js      Stage 2: builds the flat recommendation list
-                           against data/reference.js (one entry per
-                           question answered "no"), or the fixed "all
-                           met" message if there are none, plus the
-                           customer notice and disclaimer. No Anthropic
-                           dependency.
+  generate-guide.js       Stage 1. Builds the system prompt, calls Claude
+                           with a structured-output schema, falls back to
+                           data/fallback-guides.js on any failure.
+  score-assessment.js      Stage 2. Scores ten answers into a flat
+                           recommendation list. No Anthropic dependency.
 data/
-  reference.js             Fixed, pre-verified content: sectors (with
-                           each one's stakes headline reason), the ten
-                           assessment questions and their per-question
-                           recommendation text and citations, the fixed
-                           "all met" message, the Article 22 caveat,
-                           the customer notice, and the disclaimer.
-  fallback-guides.js        Hand-authored stakesExplanation/sectorRisks
-                           per sector (English, all six sectors), the
-                           fallback content model-generated content
-                           would otherwise supply.
+  reference.js             All fixed content: sectors, assessment
+                           questions, per-question recommendations and
+                           citations, Article 22 caveat, customer notice,
+                           disclaimer, plus buildRecommendations() and
+                           buildStakesHeadline().
+  fallback-guides.js        Per-sector { stakesExplanation, sectorRisks },
+                           the fallback for api/generate-guide.js's live
+                           call.
 public/
-  index.html               Single-page app shell (7 view states). Also
-                           loads jsPDF from a CDN (see Downloading the
-                           report as a PDF below).
-  css/styles.css            Design system (see Design direction below).
-  js/app.js                 State machine, the two fetch calls,
-                           rendering, PDF report generation.
-  js/sector-data.js          UI-only sector labels for the picker (no
-                           legal content, see comment in that file for
-                           why duplicating this part is safe).
+  index.html               Single-page app shell, 7 view sections. Loads
+                           jsPDF from a CDN.
+  css/styles.css            Design system: custom properties, per-view
+                           component styles.
+  js/app.js                 State machine, the two fetch calls, view
+                           rendering, PDF generation.
+  js/sector-data.js          Picker labels only (id, label, stakesTier),
+                           duplicated from data/reference.js by design:
+                           it carries no legal content, so drift here
+                           can only produce a stale button label, not an
+                           incorrect claim.
 package.json
 .env.example
 .gitignore
+README.md
+CHANGELOG.md
 ```
-
-### Design direction
-
-Clean and editorial rather than generic SaaS: off-white background
-(`#F4F3F1`), near-black text, a single accent (`#E8471F`) used only for the
-eyebrow label, CTAs, and citation badges, never as a background colour.
-Fraunces (serif) for headlines, Inter for body text (including the landing
-page subheading, kept deliberately small and light so it doesn't compete
-with the headline), IBM Plex Mono reserved for legal citations and small
-structural labels specifically, so a citation visually reads as "a
-precise, checkable fact" rather than prose, wherever it appears. The
-sector picker is a card grid, not a dropdown, so all six options are
-visible at once (the stakes tier is deliberately not shown until a report
-is generated). Visible keyboard focus states throughout; transitions are
-short and understated (view changes, button and card hover), all disabled
-under `prefers-reduced-motion`.
 
 ## Running locally
 
 Requires Node 18+ and the [Vercel CLI](https://vercel.com/docs/cli)
-(`npm i -g vercel`), since `vercel dev` is what runs the serverless
-function locally alongside the static files: a plain static server
-(`python -m http.server`, etc.) will serve the frontend but `/api/*`
-requests will 404.
+(`npm i -g vercel`). A plain static server will serve `public/` but not
+`/api/*`; use `vercel dev` for both.
 
 ```bash
 npm install
 cp .env.example .env
-# edit .env and set ANTHROPIC_API_KEY
-
+# set ANTHROPIC_API_KEY in .env
 vercel dev
 ```
 
-This serves the app (by default at `http://localhost:3000`) with the
-`api/generate-guide.js` function running as it would in production, reading
-`ANTHROPIC_API_KEY` from `.env`.
+Without `ANTHROPIC_API_KEY` set, `/api/generate-guide` still returns 200 via
+the fallback path on every request.
 
-If you don't have an Anthropic API key handy, the app still works: every
-request will fall through to the verified fallback guide (see next
-section), which is exactly the behaviour this design is meant to have.
+## Environment variables
+
+| Variable | Required | Default | Notes |
+|---|---|---|---|
+| `ANTHROPIC_API_KEY` | No (fallback if unset) | none | Read only in `api/generate-guide.js`, never sent to the browser. |
+| `ANTHROPIC_MODEL` | No | `claude-haiku-4-5-20251001` | Overrides the model used for stage 1. |
 
 ## Deploying
 
-Deployment is via **GitHub → Vercel**, not the CLI, so that every push to
-the connected branch deploys automatically and the deployment history lives
-in Vercel's dashboard alongside the commit history.
+GitHub → Vercel, push-triggered. No framework preset, no build command:
+`public/` is served as static files, `api/*.js` files are deployed as
+individual serverless functions.
 
-1. **Push this repository to GitHub** (already done if you're reading this
-   from the repo).
-2. **In the Vercel dashboard:** *Add New… → Project → Import Git
-   Repository*, select this repo. Vercel auto-detects it as a static
-   project with an `api/` functions directory: no framework preset and no
-   build command are needed, since there's no build step (the frontend is
-   plain static files, the function is a single CommonJS file).
-3. **Add the environment variable:** in the project's *Settings →
-   Environment Variables*, add:
-   - **Key:** `ANTHROPIC_API_KEY`
-   - **Value:** your real Anthropic API key
-   - **Environments:** Production, Preview, and Development (so preview
-     deployments from pull requests also generate live guides)
+1. Import the repo in the Vercel dashboard.
+2. Set `ANTHROPIC_API_KEY` (and optionally `ANTHROPIC_MODEL`) under
+   Project → Settings → Environment Variables, for Production, Preview, and
+   Development.
+3. Push to the connected branch. Every push redeploys automatically.
 
-   Optionally also add `ANTHROPIC_MODEL` if you want to override the
-   default model (see `.env.example`).
-4. **Deploy.** Vercel builds and deploys automatically. From this point on,
-   every push to the connected branch triggers a new deployment. There is
-   no separate `vercel --prod` step in normal use.
+## Design system
 
-The API key is only ever read inside `api/generate-guide.js`, on Vercel's
-server, from `process.env.ANTHROPIC_API_KEY`. It is never included in any
-file served from `public/`, so it never reaches the browser.
+`public/css/styles.css`, custom properties in `:root`:
 
-**Without this variable set, the app does not error: every request falls
-through to the verified fallback content in `data/fallback-guides.js`.**
-That's the reliability design decision above working as intended, not a
-bug, but it does mean the live-generation path (the model actually writing
-`stakesExplanation`/`sectorRisks`) is only exercised once the key is set.
+```
+--color-bg: #f4f3f1        page background
+--color-surface: #ffffff   cards
+--color-ink: #17140f       primary text
+--color-ink-soft: #4a463f  secondary text
+--color-border: #ddd9d1
+--color-accent: #e8471f    CTAs, citation badges only, never a background
+--color-tint: #f6ede3      customer-notice block, all-met message
+--font-serif: Fraunces     headings
+--font-body: Inter         body text
+--font-mono: IBM Plex Mono citations, structural labels, question numbers
+```
 
-## Testing the fallback path
+Six sectors are shown as a card grid (`.sector-grid`), not a dropdown, so all
+six are visible without interaction. `prefers-reduced-motion` disables the
+view-transition and hover animations defined via `--ease-standard`.
 
-The fallback is not a theoretical code path. It was exercised directly as
-part of building this project, by temporarily breaking the live call in
-`api/generate-guide.js` (e.g. removing/renaming `ANTHROPIC_API_KEY`, or
-forcing the Anthropic call to throw) and confirming that:
+## Known limitations
 
-1. The endpoint still returns **HTTP 200**, not an error.
-2. The response has `isFallback: true` and a `fallbackNote` explaining
-   what happened.
-3. The frontend renders the amber "Showing a cached version" banner and a
-   complete, correctly-structured stakes page underneath it: same
-   assessment questions, same Article 22 caveat, sourced from
-   `data/reference.js` and `data/fallback-guides.js` instead of the live
-   model. The recommendation list itself is unaffected either way, since
-   it's produced by stage 2, which never depends on Anthropic.
-
-The quickest way to reproduce this locally: unset `ANTHROPIC_API_KEY` (or
-just don't set it) and request any guide. The function's own key check
-throws before any network call is made, so this exercises the exact same
-`catch` block a real Anthropic outage would hit.
-
-This only applies to `api/generate-guide.js` (stage 1). `api/score-assessment.js`
-(stage 2) has no `try/catch` fallback to test, because it has no Anthropic
-dependency to fail: it either returns a scored guide or a 400 for a
-malformed request (unknown sector, an incomplete set of answers), the same
-whether or not `ANTHROPIC_API_KEY` is set at all.
-
-## Content scope and limitations
-
-- **Sectors are a closed list by design** (see spec: "no other option").
-  This keeps every possible input reviewable by a human, which a free-text
-  sector field would not allow.
-- **English only, in this version.** Multi-language generation added
-  translation risk (a model could subtly misrender a citation or a fixed
-  legal sentence) without a corresponding benefit for the initial
-  deliverable, so it was removed rather than left half-supported. The data
-  model doesn't carry a `language` field at all any more.
-- **This tool produces a starting point, not legal advice, an audit, or a
-  certification of compliance**: every guide says so explicitly, in the
-  `disclaimer` field.
-- **The ten-question assessment is required, not optional.** There is no
-  path from the stakes screen to the report that skips it: the frontend
-  disables "Generate your report" until all ten questions are answered,
-  and `api/score-assessment.js` independently rejects an incomplete set
-  of answers with a 400, so the requirement holds even if the frontend
-  check were somehow bypassed.
-- **The report is flat and answer-specific, not a fixed six-item
-  checklist.** A question answered "yes" produces no output at all;
-  there's nothing to confirm it was checked beyond its absence from the
-  report. Answering "yes" to everything doesn't yield an empty report,
-  though: `ALL_MET_MESSAGE`, a single fixed confirmation line, is shown
-  instead of an empty recommendation list.
-- **Picking a sector goes straight to the stakes page.** There is no
-  separate "generate" click between the picker and the stakes screen;
-  `api/generate-guide.js` (stage 1) fires automatically as soon as a
-  sector is selected. This removes a decision point, not backend work:
-  the live-or-fallback stakes call still has to complete before the
-  stakes page can render, so the loading screen's duration is unchanged.
-- **Fallback content is hand-authored, not generated.** It exists because
-  live generation can't always be trusted to run, so the fallback's
-  sector-specific content has to be independently checkable the same way
-  the fixed reference block is: writing it once, by hand, is what makes
-  that possible.
+- Sectors are a closed list of 6; no free-text sector input.
+- English only; no `language` field anywhere in the data model.
+- The ten-question assessment is required: the frontend disables "Generate
+  your report" until all ten are answered, and `api/score-assessment.js`
+  independently rejects an incomplete `answers` object with a 400.
+- `data/fallback-guides.js` content is hand-written, not derived from the
+  model at any point, so it can go stale relative to current guidance if not
+  manually reviewed.
+- A few user-facing strings outside the report/assessment flow still use
+  "guide" rather than "report" (the landing page `<h1>`, the meta
+  description tag): not yet swept for consistency with the rest of the copy.
