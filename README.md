@@ -191,13 +191,16 @@ times out, the fallback content renders immediately, and stage 2
 [jsPDF](https://github.com/parallax/jsPDF), loaded from a CDN
 (`public/index.html`) with no backend change and no report content ever
 leaving the browser to produce the file: `buildReportPdf()` in
-`public/js/app.js` takes the same `state.guide` object the report screen
-already rendered and lays it out on an A4 page (title, sector, stakes
-level, generation date, the stakes summary and risks, the flat
-recommendation list with each item's originating question and citation,
-the customer notice, and the disclaimer in smaller text at the bottom),
-paginating automatically via a single `ensureSpace()` check before every
-line.
+`public/js/app.js` lays out a title, sector, stakes level, and
+generation date, followed by exactly the same content the report screen
+itself shows: the flat recommendation list (each item with its
+originating question and citation), the customer notice, and the
+disclaimer in smaller text at the bottom, paginating automatically via a
+single `ensureSpace()` check before every line. The PDF deliberately
+does not recap the stakes explanation or sector risks: that content
+belongs to the stakes screen, shown earlier in the flow, and repeating
+it here would duplicate content that isn't specific to this SME's
+answers, and would push most reports past one page for no reason.
 
 jsPDF ships three built-in ("core") fonts with no embedding step:
 Helvetica, Times, and Courier. The design system otherwise stands on
