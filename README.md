@@ -19,6 +19,7 @@ and how it deploys.
 - [The core design decision: constrained reasoning, not recall](#the-core-design-decision-constrained-reasoning-not-recall)
 - [The reliability design decision: a verified fallback, always](#the-reliability-design-decision-a-verified-fallback-always)
 - [Performance: what's actually tunable, and the practical floor](#performance-whats-actually-tunable-and-the-practical-floor)
+- [Downloading the report as a PDF](#downloading-the-report-as-a-pdf)
 - [Project structure](#project-structure)
 - [Running locally](#running-locally)
 - [Deploying](#deploying)
@@ -184,6 +185,30 @@ fallback path (see above) has no such floor: once a live call fails or
 times out, the fallback content renders immediately, and stage 2
 (`api/score-assessment.js`) never depends on Anthropic at all.
 
+## Downloading the report as a PDF
+
+"Download your report" builds a PDF entirely client-side, using
+[jsPDF](https://github.com/parallax/jsPDF), loaded from a CDN
+(`public/index.html`) with no backend change and no report content ever
+leaving the browser to produce the file: `buildReportPdf()` in
+`public/js/app.js` takes the same `state.guide` object the report screen
+already rendered and lays it out on an A4 page (title, sector, stakes
+level, generation date, the stakes summary and risks, the flat
+recommendation list with each item's originating question and citation,
+the customer notice, and the disclaimer in smaller text at the bottom),
+paginating automatically via a single `ensureSpace()` check before every
+line.
+
+jsPDF ships three built-in ("core") fonts with no embedding step:
+Helvetica, Times, and Courier. The design system otherwise stands on
+Fraunces, Inter, and IBM Plex Mono, which aren't among them, so the PDF
+approximates rather than exactly reproduces the on-screen look: Times
+stands in for Fraunces on headings, Helvetica for Inter in body text,
+and Courier for IBM Plex Mono on citation labels. Colours transfer
+exactly, not approximately: the PDF's ink, soft-ink, and accent colours
+are the same RGB values as `--color-ink`, `--color-ink-soft`, and
+`--color-accent` in `styles.css`.
+
 ## Project structure
 
 ```
@@ -210,10 +235,12 @@ data/
                            fallback content model-generated content
                            would otherwise supply.
 public/
-  index.html               Single-page app shell (7 view states).
+  index.html               Single-page app shell (7 view states). Also
+                           loads jsPDF from a CDN (see Downloading the
+                           report as a PDF below).
   css/styles.css            Design system (see Design direction below).
   js/app.js                 State machine, the two fetch calls,
-                           rendering, download-as-text.
+                           rendering, PDF report generation.
   js/sector-data.js          UI-only sector labels for the picker (no
                            legal content, see comment in that file for
                            why duplicating this part is safe).

@@ -274,58 +274,182 @@
     return div.innerHTML;
   }
 
-  // ---------------- Download ----------------
+  // ---------------- Download (PDF) ----------------
 
-  function guideToPlainText(guide) {
-    const lines = [];
-    lines.push("SIXPOINT REPORT");
-    lines.push(`Sector: ${guide.sector}`);
-    lines.push(`Stakes: ${guide.stakesTier === "higher" ? "High stakes" : "Standard stakes"}`);
-    if (guide.isFallback) {
-      lines.push("");
-      lines.push(`Note: ${guide.fallbackNote}`);
+  // Approximates the on-screen design system within what jsPDF's core
+  // fonts support: "times" stands in for the serif (Fraunces) used on
+  // headings, "helvetica" for the body font (Inter), "courier" for the
+  // monospaced citation labels (IBM Plex Mono), and the same ink/soft-ink/
+  // accent/border colours as styles.css. No custom font embedding: this
+  // is a client-side, CDN-loaded library with no build step, and the
+  // core fonts are what it can render without one.
+  const PDF_COLORS = {
+    ink: [23, 20, 15],
+    inkSoft: [74, 70, 63],
+    accent: [232, 71, 31],
+    border: [221, 217, 209],
+  };
+
+  function formatReportDate(date) {
+    return date.toLocaleDateString("en-GB", {
+      day: "numeric",
+      month: "long",
+      year: "numeric",
+    });
+  }
+
+  function buildReportPdf(guide) {
+    const { jsPDF } = window.jspdf;
+    const doc = new jsPDF({ unit: "pt", format: "a4" });
+
+    const pageWidth = doc.internal.pageSize.getWidth();
+    const pageHeight = doc.internal.pageSize.getHeight();
+    const margin = 48;
+    const contentWidth = pageWidth - margin * 2;
+    let y = margin;
+
+    function ensureSpace(height) {
+      if (y + height > pageHeight - margin) {
+        doc.addPage();
+        y = margin;
+      }
     }
-    lines.push("");
-    lines.push(guide.stakesHeadline);
-    lines.push(guide.stakesExplanation);
-    lines.push("");
-    lines.push("RISKS TO WATCH FOR");
-    (guide.sectorRisks || []).forEach((r) => lines.push(`- ${r}`));
-    if (guide.article22Caveat) {
-      lines.push("");
-      lines.push(`${guide.article22Caveat.text} (${guide.article22Caveat.citation})`);
-    }
-    lines.push("");
-    lines.push("RECOMMENDATIONS");
-    if (guide.allMet) {
-      lines.push(guide.allMetMessage);
-    } else {
-      (guide.recommendations || []).forEach((item) => {
-        lines.push("");
-        lines.push(item.question);
-        lines.push(`${item.text} (${item.citation})`);
+
+    function addText(text, opts) {
+      opts = opts || {};
+      const font = opts.font || "helvetica";
+      const style = opts.style || "normal";
+      const size = opts.size || 10.5;
+      const color = opts.color || PDF_COLORS.ink;
+      const lineHeight = opts.lineHeight || size * 1.4;
+      const width = opts.width || contentWidth;
+
+      doc.setFont(font, style);
+      doc.setFontSize(size);
+      doc.setTextColor(color[0], color[1], color[2]);
+      doc.splitTextToSize(text, width).forEach((line) => {
+        ensureSpace(lineHeight);
+        doc.text(line, margin, y);
+        y += lineHeight;
       });
     }
-    lines.push("");
-    lines.push("TELL YOUR CUSTOMERS");
-    lines.push(guide.customerNotice);
-    lines.push("");
-    lines.push(guide.disclaimer);
-    return lines.join("\n");
+
+    function addDivider() {
+      ensureSpace(14);
+      doc.setDrawColor(PDF_COLORS.border[0], PDF_COLORS.border[1], PDF_COLORS.border[2]);
+      doc.setLineWidth(0.75);
+      doc.line(margin, y, margin + contentWidth, y);
+      y += 14;
+    }
+
+    // Title
+    addText("SixPoint, Know Where Your CRM's AI Stands", {
+      font: "times",
+      style: "bold",
+      size: 19,
+      lineHeight: 23,
+    });
+    y += 8;
+
+    // Sector, stakes level, generation date
+    const stakesLabel = guide.stakesTier === "higher" ? "High stakes" : "Standard stakes";
+    addText(`Sector: ${guide.sector}`, { color: PDF_COLORS.inkSoft });
+    addText(`Stakes level: ${stakesLabel}`, { color: PDF_COLORS.inkSoft });
+    addText(`Generated on ${formatReportDate(new Date())}`, { color: PDF_COLORS.inkSoft });
+    if (guide.isFallback) {
+      y += 4;
+      addText(`Note: ${guide.fallbackNote}`, {
+        style: "italic",
+        size: 9,
+        color: PDF_COLORS.inkSoft,
+      });
+    }
+    y += 6;
+    addDivider();
+
+    // Stakes summary
+    addText(guide.stakesHeadline, { font: "times", style: "bold", size: 13, lineHeight: 17 });
+    y += 4;
+    addText(guide.stakesExplanation, { color: PDF_COLORS.inkSoft });
+    y += 6;
+
+    if (guide.sectorRisks && guide.sectorRisks.length) {
+      addText("Risks worth watching for", { style: "bold", size: 11 });
+      y += 2;
+      guide.sectorRisks.forEach((risk) => {
+        addText(`•  ${risk}`, { size: 10, color: PDF_COLORS.inkSoft });
+      });
+      y += 4;
+    }
+
+    if (guide.article22Caveat) {
+      addText(`${guide.article22Caveat.text} (${guide.article22Caveat.citation})`, {
+        style: "italic",
+        size: 9,
+        color: PDF_COLORS.inkSoft,
+      });
+    }
+    y += 8;
+    addDivider();
+
+    // Recommendations, clearly separated per item rather than run together
+    addText("Recommendations based on your answers", {
+      font: "times",
+      style: "bold",
+      size: 15,
+      lineHeight: 19,
+    });
+    y += 8;
+
+    if (guide.allMet) {
+      addText(guide.allMetMessage, { style: "bold", size: 11 });
+      y += 10;
+    } else {
+      const items = guide.recommendations || [];
+      items.forEach((item, index) => {
+        ensureSpace(60);
+        addText(item.question, {
+          font: "times",
+          style: "italic",
+          size: 9.5,
+          lineHeight: 12,
+          color: PDF_COLORS.inkSoft,
+        });
+        y += 2;
+        addText(item.text, { size: 10.5, lineHeight: 14 });
+        y += 3;
+        addText(item.citation.toUpperCase(), {
+          font: "courier",
+          style: "bold",
+          size: 8.5,
+          color: PDF_COLORS.accent,
+        });
+        y += 8;
+        if (index < items.length - 1) {
+          addDivider();
+        }
+      });
+    }
+    y += 4;
+    addDivider();
+
+    // Tell your customers
+    addText("Tell your customers", { font: "times", style: "bold", size: 12 });
+    y += 3;
+    addText(guide.customerNotice, { size: 10, color: PDF_COLORS.inkSoft });
+    y += 10;
+    addDivider();
+
+    // Disclaimer, smaller text at the bottom
+    addText(guide.disclaimer, { style: "italic", size: 8, lineHeight: 11, color: PDF_COLORS.inkSoft });
+
+    return doc;
   }
 
   function downloadGuide() {
     if (!state.guide) return;
-    const text = guideToPlainText(state.guide);
-    const blob = new Blob([text], { type: "text/plain;charset=utf-8" });
-    const url = URL.createObjectURL(blob);
-    const a = document.createElement("a");
-    a.href = url;
-    a.download = `sixpoint-report-${state.sectorId}.txt`;
-    document.body.appendChild(a);
-    a.click();
-    document.body.removeChild(a);
-    URL.revokeObjectURL(url);
+    const doc = buildReportPdf(state.guide);
+    doc.save(`sixpoint-report-${state.sectorId}.pdf`);
   }
 
   // ---------------- Wire up ----------------
