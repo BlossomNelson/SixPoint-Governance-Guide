@@ -24,9 +24,9 @@
   --color-accent-ink: #ffffff;
   /* A soft, secondary tint for content that should read as smaller and
      quieter than the main surface cards (currently: the "Tell your
-     customers" block). Distinct from both --color-bg and
-     --color-surface, so it neither disappears into the page nor
-     competes with the white intervention cards. */
+     customers" block and the "all met" confirmation message). Distinct
+     from both --color-bg and --color-surface, so it neither disappears
+     into the page nor competes with the white recommendation cards. */
   --color-tint: #f6ede3;
 
   --font-serif: "Fraunces", ui-serif, Georgia, serif;
@@ -429,6 +429,12 @@ p {
   flex: 1 1 320px;
 }
 
+.item-number {
+  font-family: var(--font-mono);
+  color: var(--color-accent);
+  margin-right: 8px;
+}
+
 .assessment-answers {
   display: flex;
   gap: 8px;
@@ -459,42 +465,38 @@ p {
   border-color: var(--color-accent);
 }
 
-/* ---------- Interventions ---------- */
+/* ---------- Recommendations ---------- */
 
-.intervention-card {
+/* Flat list: one card per question the SME answered "no" to, nothing
+   for questions answered "yes", no six-item grouping or numbering above
+   the individual card. */
+.recommendations-list {
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+  margin: 16px 0 0;
+}
+
+.recommendation-card {
   background: var(--color-surface);
   border: 1px solid var(--color-border);
   border-radius: var(--radius-md);
   padding: 22px;
-  margin-bottom: 16px;
   box-shadow: var(--shadow-card);
 }
 
-.intervention-head {
-  display: flex;
-  justify-content: space-between;
-  align-items: flex-start;
-  gap: 12px;
-  margin-bottom: 10px;
+/* The original assessment question, quoted small and muted above its
+   recommendation, so each card is traceable to exactly what was asked
+   without needing a number or a group heading to do that job. */
+.recommendation-question {
+  font-size: 0.85rem;
+  font-style: italic;
+  color: var(--color-ink-soft);
+  margin: 0 0 8px;
 }
 
-.intervention-title {
-  font-size: 1.05rem;
-  font-weight: 600;
-  margin: 0;
-}
-
-.intervention-number {
-  font-family: var(--font-mono);
-  color: var(--color-accent);
-  margin-right: 8px;
-}
-
-.badge-row {
-  display: flex;
-  gap: 8px;
-  flex-wrap: wrap;
-  flex-shrink: 0;
+.recommendation-text {
+  margin: 0 0 12px;
 }
 
 .badge {
@@ -513,63 +515,28 @@ p {
   border: 1px solid rgba(232, 71, 31, 0.3);
 }
 
-.badge-flag {
-  background: var(--color-ink);
-  color: #fff;
-}
-
-.badge-flag.flag-worthdoing {
-  background: transparent;
-  color: var(--color-ink-soft);
-  border: 1px solid var(--color-border);
-}
-
-/* Personalised per-intervention result, from the SME's own assessment
-   answers. "Not met" is the actionable one, so it gets the solid accent
-   treatment; "Met" is a quiet confirmation and stays outlined, the same
-   restrained treatment as .flag-worthdoing above, so a fully "Met"
-   guide doesn't read as a wall of colour. */
-.badge-status.status-not-met {
-  background: var(--color-accent);
-  color: var(--color-accent-ink);
-  border: 1px solid var(--color-accent);
-}
-
-.badge-status.status-met {
-  background: transparent;
-  color: var(--color-ink-soft);
-  border: 1px solid var(--color-border);
-}
-
-.intervention-body {
-  margin-bottom: 10px;
-}
-
-/* Answer-specific recommendation text: one line per applicable "no"
-   answer, so an intervention with two or three unmet questions shows
-   that many stacked lines, each with its own left-border indent. The
-   gap between stacked lines only applies when there's more than one. */
-.intervention-practice {
-  font-size: 0.9rem;
-  border-left: 2px solid var(--color-border);
-  padding-left: 12px;
-  color: var(--color-ink-soft);
-  margin: 0;
-}
-
-.intervention-practice + .intervention-practice {
-  margin-top: 8px;
+/* Shown instead of an empty list when every question was answered
+   "yes": the same soft-tint treatment as the customer-notice block, so
+   a fully clean result still reads as a deliberate, positive outcome
+   rather than a blank space where the recommendations should be. */
+.all-met-message {
+  background: var(--color-tint);
+  border-radius: var(--radius-md);
+  padding: 20px 24px;
+  margin: 16px 0 0;
+  color: var(--color-ink);
+  font-weight: 600;
 }
 
 /* ---------- Tell your customers ---------- */
 
 /* Brief advice, not a quote to copy: plain prose in its own tinted
-   block, visually smaller and quieter than the six white intervention
-   cards above so it reads as secondary, not a seventh point competing
-   with the guide itself. The tint (--color-tint) is deliberately its
-   own colour, distinct from both the page background and the card
-   surface, so this block is legible as a separate, lower-priority
-   region at a glance. */
+   block, visually smaller and quieter than the white recommendation
+   cards above so it reads as secondary, not another recommendation
+   competing with the report itself. The tint (--color-tint) is
+   deliberately its own colour, distinct from both the page background
+   and the card surface, so this block is legible as a separate,
+   lower-priority region at a glance. */
 .customer-notice-block {
   margin-top: 40px;
   background: var(--color-tint);
@@ -636,10 +603,6 @@ p {
 @media (max-width: 480px) {
   main {
     padding: 36px 0 64px;
-  }
-
-  .intervention-head {
-    flex-direction: column;
   }
 
   .assessment-item {
