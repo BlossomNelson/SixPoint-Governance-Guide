@@ -5,7 +5,7 @@
  * a static frontend, and this app has seven states (landing, picker,
  * loading, stakes, assessment, guide, error) with no shared client-side
  * state beyond "which sector did the user pick", their assessment
- * answers, and the guide content assembled across the two API calls,
+ * answers, and the report content assembled across the two API calls,
  * so a framework would add build tooling for very little benefit here.
  * ------------------------------------------------------------------
  */
@@ -124,7 +124,7 @@
       const li = document.createElement("li");
       li.className = "assessment-item";
       li.innerHTML = `
-        <p class="assessment-question"><span class="intervention-number">${String(
+        <p class="assessment-question"><span class="item-number">${String(
           index + 1
         ).padStart(2, "0")}</span>${escapeHtml(q.text)}</p>
         <div class="assessment-answers" role="group" aria-label="Answer to question ${index + 1}">
@@ -169,7 +169,7 @@
     document.getElementById("see-results-btn").disabled = answered < totalQuestions;
   }
 
-  // ---------------- Scoring (stage 2: Met/Not Met per intervention) ----------------
+  // ---------------- Scoring (stage 2: flat, per-question recommendations) ----------------
 
   async function submitAssessment() {
     retryAction = submitAssessment;
@@ -186,10 +186,12 @@
       }
 
       const scored = await res.json();
-      state.guide.interventions = scored.interventions;
+      state.guide.recommendations = scored.recommendations;
+      state.guide.allMet = scored.allMet;
+      state.guide.allMetMessage = scored.allMetMessage;
       state.guide.customerNotice = scored.customerNotice;
       state.guide.disclaimer = scored.disclaimer;
-      renderGuide(state.guide);
+      renderRecommendations(state.guide);
       showView("guide");
     } catch (err) {
       document.getElementById("error-message").textContent =
@@ -234,38 +236,33 @@
     });
   }
 
-  // ---------------- Guide screen rendering ----------------
+  // ---------------- Report rendering ----------------
 
-  function renderGuide(guide) {
-    const interventionsList = document.getElementById("interventions-list");
-    interventionsList.innerHTML = "";
-    (guide.interventions || []).forEach((item, index) => {
-      const li = document.createElement("li");
-      li.className = "intervention-card";
-      const isNonNegotiable = item.flagLabel === "non-negotiable";
-      const isMet = item.status === "met";
-      li.innerHTML = `
-        <div class="intervention-head">
-          <h3 class="intervention-title"><span class="intervention-number">${String(
-            index + 1
-          ).padStart(2, "0")}</span>${escapeHtml(item.title)}</h3>
-          <div class="badge-row">
-            <span class="badge badge-status ${isMet ? "status-met" : "status-not-met"}">${
-              isMet ? "Met" : "Not met"
-            }</span>
-            <span class="badge badge-flag ${isNonNegotiable ? "" : "flag-worthdoing"}">${escapeHtml(
-              item.flagLabel
-            )}</span>
-            <span class="badge badge-citation">${escapeHtml(item.citation)}</span>
-          </div>
-        </div>
-        <p class="intervention-body">${escapeHtml(item.body)}</p>
-        ${(item.recommendations || [])
-          .map((line) => `<p class="intervention-practice">${escapeHtml(line)}</p>`)
-          .join("")}
-      `;
-      interventionsList.appendChild(li);
-    });
+  // Flat list, one card per question the SME answered "no" to, nothing
+  // for questions answered "yes", no grouping above the individual
+  // question. If every question was "yes", recommendations is empty and
+  // a single fixed confirmation message renders instead.
+  function renderRecommendations(guide) {
+    const list = document.getElementById("recommendations-list");
+    list.innerHTML = "";
+
+    if (guide.allMet) {
+      const p = document.createElement("p");
+      p.className = "all-met-message";
+      p.textContent = guide.allMetMessage;
+      list.appendChild(p);
+    } else {
+      (guide.recommendations || []).forEach((item) => {
+        const card = document.createElement("div");
+        card.className = "recommendation-card";
+        card.innerHTML = `
+          <p class="recommendation-question">${escapeHtml(item.question)}</p>
+          <p class="recommendation-text">${escapeHtml(item.text)}</p>
+          <span class="badge badge-citation">${escapeHtml(item.citation)}</span>
+        `;
+        list.appendChild(card);
+      });
+    }
 
     document.getElementById("customer-notice-text").textContent = guide.customerNotice;
     document.getElementById("disclaimer-text").textContent = guide.disclaimer;
@@ -281,7 +278,7 @@
 
   function guideToPlainText(guide) {
     const lines = [];
-    lines.push("SIXPOINT GOVERNANCE GUIDE");
+    lines.push("SIXPOINT REPORT");
     lines.push(`Sector: ${guide.sector}`);
     lines.push(`Stakes: ${guide.stakesTier === "higher" ? "High stakes" : "Standard stakes"}`);
     if (guide.isFallback) {
@@ -299,16 +296,16 @@
       lines.push(`${guide.article22Caveat.text} (${guide.article22Caveat.citation})`);
     }
     lines.push("");
-    lines.push("SIX GOVERNANCE INTERVENTIONS");
-    (guide.interventions || []).forEach((item, i) => {
-      const isMet = item.status === "met";
-      lines.push("");
-      lines.push(
-        `${i + 1}. ${item.title} [${isMet ? "Met" : "Not met"}] [${item.flagLabel}] (${item.citation})`
-      );
-      lines.push(item.body);
-      (item.recommendations || []).forEach((line) => lines.push(line));
-    });
+    lines.push("RECOMMENDATIONS");
+    if (guide.allMet) {
+      lines.push(guide.allMetMessage);
+    } else {
+      (guide.recommendations || []).forEach((item) => {
+        lines.push("");
+        lines.push(item.question);
+        lines.push(`${item.text} (${item.citation})`);
+      });
+    }
     lines.push("");
     lines.push("TELL YOUR CUSTOMERS");
     lines.push(guide.customerNotice);

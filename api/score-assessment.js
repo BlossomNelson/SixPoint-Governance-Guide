@@ -2,19 +2,21 @@
  * api/score-assessment.js
  * ------------------------------------------------------------------
  * Vercel serverless function, STAGE 2 OF 2. Takes the SME's ten yes/no
- * answers to the fixed assessment (see data/reference.js) and returns
- * the six governance interventions, each carrying a Met/Not Met status,
- * plus the customer notice and disclaimer.
+ * answers to the fixed assessment (see data/reference.js) and returns a
+ * flat list of recommendations: one per question answered "no", nothing
+ * for questions answered "yes", and no six-item grouping of any kind.
+ * If every question was answered "yes", the recommendation list is
+ * empty and a single fixed confirmation message is returned instead.
  *
  * This endpoint never calls Anthropic and has no fallback path, because
  * it needs none: scoring is pure, deterministic lookup against fixed
- * data (statusForIntervention in data/reference.js), not generation.
- * The only way this endpoint fails is a malformed request (unknown
- * sector, missing answers), which is a 400, not a "fall back to cached
- * content" situation. This is also why the personalised, six-point
- * guide keeps working even if Anthropic is completely unreachable: the
- * only place this app depends on a live model call is the stakes
- * content in api/generate-guide.js, not the guide itself.
+ * data (buildRecommendations in data/reference.js), not generation. The
+ * only way this endpoint fails is a malformed request (unknown sector,
+ * missing answers), which is a 400, not a "fall back to cached content"
+ * situation. This is also why the personalised report keeps working
+ * even if Anthropic is completely unreachable: the only place this app
+ * depends on a live model call is the stakes content in
+ * api/generate-guide.js, not the report itself.
  * ------------------------------------------------------------------
  */
 
@@ -23,7 +25,8 @@ const {
   CUSTOMER_NOTICE,
   DISCLAIMER,
   ASSESSMENT_QUESTIONS,
-  buildInterventions,
+  ALL_MET_MESSAGE,
+  buildRecommendations,
   getSector,
 } = require("../data/reference");
 
@@ -66,8 +69,12 @@ module.exports = (req, res) => {
     return;
   }
 
+  const recommendations = buildRecommendations(answers);
+
   res.status(200).json({
-    interventions: buildInterventions(sector.stakesTier, answers),
+    recommendations,
+    allMet: recommendations.length === 0,
+    allMetMessage: ALL_MET_MESSAGE,
     customerNotice: CUSTOMER_NOTICE,
     disclaimer: DISCLAIMER,
   });
