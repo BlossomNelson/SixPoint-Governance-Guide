@@ -1,11 +1,13 @@
-# SixPoint: AI Governance Guide Generator
+# SixPoint, Know Where Your CRM's AI Stands
 
 SixPoint is a practical deliverable for an MSc thesis on AI governance
 tooling for SMEs. A user picks a business sector, answers a fixed
 ten-question yes/no assessment, and SixPoint returns a short, personalised
-compliance guide: six governance interventions for AI-powered CRM tools,
-each grounded in a specific GDPR or EU AI Act article and marked Met or Not
-Met based on their answers. English only, in this version.
+report: one recommendation per question they answered "no" to, each
+grounded in a specific GDPR or EU AI Act citation, and nothing for
+questions they answered "yes" to. There is no six-item grouping in the
+output; each recommendation stands on its own, tied only to the question
+that produced it. English only, in this version.
 
 This document is the architecture reference for the project's Configuration
 Manual: what each part does, why it's built that way, how to run it locally,
@@ -34,8 +36,8 @@ and how it deploys.
   | js/sector-data.js   |  JSON  +------------------------------+ JSON +-----------+
   |                    |   POST   +------------------------------+
   |                    | -------> | api/score-assessment.js      |
-  |                    | <------  | (stage 2: deterministic      |
-  |                    |   JSON   |  Met/Not Met scoring)        |
+  |                    | <------  | (stage 2: deterministic,     |
+  |                    |   JSON   |  flat recommendation list)   |
   +------------------+           +------------------------------+
                                   data/reference.js, data/fallback-guides.js
                                   (both functions read from these)
@@ -51,11 +53,13 @@ and how it deploys.
     Anthropic at all. Returns the sector's stakes-tier content (heading,
     explanation, risks) plus the fixed ten-question assessment.
   - `api/score-assessment.js` (stage 2): takes the SME's ten answers and
-    returns the six interventions, each with a Met/Not Met status, plus
-    the customer notice and disclaimer. Pure, deterministic rule-based
-    lookup against `data/reference.js`, no Anthropic call and no
-    fallback path, because there's nothing in it that can fail the way a
-    live model call can.
+    returns a flat recommendation list, one entry per question answered
+    "no" (nothing for questions answered "yes"), plus the customer
+    notice and disclaimer. If every question was "yes", the list is
+    empty and a single fixed confirmation message is returned instead.
+    Pure, deterministic rule-based lookup against `data/reference.js`,
+    no Anthropic call and no fallback path, because there's nothing in
+    it that can fail the way a live model call can.
 - **Two data files** (`data/reference.js`, `data/fallback-guides.js`): the
   single source of truth for every legal fact the app uses. See below.
 - **GitHub to Vercel**: deployment is push-triggered. There is no manual
@@ -69,9 +73,9 @@ Claude "what does GDPR say about vendor data processing?" and trusting the
 answer: a model's recall of a specific article number is exactly the kind
 of thing that can't be checked without redoing the research anyway.
 
-Instead, `data/reference.js` holds every fixed fact the app uses (the six
-governance interventions and their citations, the ten assessment
-questions, the six sectors and their stakes tiers, the GDPR Article 22
+Instead, `data/reference.js` holds every fixed fact the app uses (the ten
+assessment questions and their per-question recommendation text and
+citations, the six sectors and their stakes tiers, the GDPR Article 22
 caveat, the closing customer-notice advice, and the disclaimer), all
 written and checked against primary sources **before** any code was
 written, by a human, once. Since this version is English only, there is no
@@ -95,43 +99,29 @@ data.") is fixed content too, not a third model field: `buildStakesHeadline()`
 in `data/reference.js` assembles it from `sector.label`, `sector.stakesTier`,
 and a pre-written `sector.stakesReason`, all fixed per sector.
 
-The **flag** on each intervention ("non-negotiable" for higher-stakes
-sectors, "worth doing" for standard sectors) is likewise never asked of the
-model: `buildInterventions()` computes it in code from the sector's stakes
-tier via `flagForStakesTier()`.
-
-The **Met/Not Met status** shown against each intervention works the same
-way, one level further: the SME's ten yes/no answers never reach Claude at
-all. `api/score-assessment.js` calls `statusForIntervention()` in
-`data/reference.js`, which looks up the fixed questions mapped to that
-intervention and requires every one of them to be answered "yes" for a
-"Met" status; a single "no" among them is enough for "Not Met".
-
-The recommendation text shown alongside each intervention is
-**answer-specific, not one generic line per intervention.** Each
-assessment question has its own fixed `textIfNo` in the `RECOMMENDATIONS`
-object in `data/reference.js`; `buildRecommendationLines()` selects which
-of those fixed lines to show based on exactly which of the SME's answers
-were "no", so two SMEs who both fail the same intervention for different
-reasons see different, specific recommendations, not one text standing in
-for both problems. Where a question's line only makes sense once an
-earlier one is addressed (`human-review`'s Q6, "make the review more
-thorough", assumes a review process already exists per Q5), that line
-only appears once the prerequisite question is "yes"; everywhere else,
-every applicable "no" line is shown independently. When every mapped
-question is "yes", a single fixed confirmation line is shown instead
-(e.g. "Met. Continue reviewing this periodically..."). All of this is
-fixed, pre-written text: only which lines to show is computed at
-runtime, never the text itself.
+The **recommendation list is flat and answer-specific, not grouped or
+generic.** Each of the ten assessment questions has its own fixed
+`{ text, citation }` entry in the `QUESTION_RECOMMENDATIONS` object in
+`data/reference.js`. `buildRecommendations(answers)` filters the ten
+questions down to whichever ones were answered "no" and maps each to its
+fixed recommendation, in question order; a question answered "yes"
+contributes nothing to the output. There is no intervention-level
+grouping anywhere in this file or in the report: a report showing
+exactly the questions the SME answered "no" to (and nothing else) is a
+direct, traceable consequence of that filter, not a summary or a rollup.
+If every question was answered "yes", `buildRecommendations` returns an
+empty array, and the app shows the fixed `ALL_MET_MESSAGE` instead of an
+empty report.
 
 The net effect: if an examiner asks "how do you know the model didn't just
-make up a citation, water down the Article 22 caveat, or score the
-assessment itself," the answer is that it structurally can't. None of that
-is ever sent to the model to generate, transform, or score; all of it is
-assembled or computed from `data/reference.js` after the model's response
-(or the fallback content) comes back. The model's only role is writing
-three sector-specific sentences within the frame that fixed content sets,
-not producing, reproducing, or scoring any legal claim itself.
+make up a citation, water down the Article 22 caveat, or decide which
+recommendations apply," the answer is that it structurally can't. None of
+that is ever sent to the model to generate, transform, or decide; all of
+it is assembled or computed from `data/reference.js` after the model's
+response (or the fallback content) comes back. The model's only role is
+writing three sector-specific sentences within the frame that fixed
+content sets, not producing, reproducing, or selecting any legal claim
+itself.
 
 ## The reliability design decision: a verified fallback, always
 
@@ -152,12 +142,12 @@ only thing that can differ between them is the three sector-specific
 sentences, live-written by the model versus hand-written in
 `data/fallback-guides.js`, checked against the same sources.
 
-The six interventions, their Met/Not Met status, the customer notice, and
-the disclaimer go further still: `api/score-assessment.js` never calls
-Anthropic at all, so that content keeps working exactly the same way even
-if the Anthropic API is completely unreachable. The only part of a guide
-that depends on a live model call is the stage-1 stakes content; the
-personalised six-point guide itself does not.
+The recommendation list, the customer notice, and the disclaimer go
+further still: `api/score-assessment.js` never calls Anthropic at all, so
+that content keeps working exactly the same way even if the Anthropic API
+is completely unreachable. The only part of a report that depends on a
+live model call is the stage-1 stakes content; the personalised
+recommendation list itself does not.
 
 See [Testing the fallback path](#testing-the-fallback-path) for how this
 was verified.
@@ -202,17 +192,18 @@ api/
                            with a structured-output schema, assembles the
                            stakes content and question list, falls back
                            on any failure.
-  score-assessment.js      Stage 2: scores the ten answers against
-                           data/reference.js and assembles the six
-                           interventions (with Met/Not Met status), the
-                           customer notice, and the disclaimer. No
-                           Anthropic dependency.
+  score-assessment.js      Stage 2: builds the flat recommendation list
+                           against data/reference.js (one entry per
+                           question answered "no"), or the fixed "all
+                           met" message if there are none, plus the
+                           customer notice and disclaimer. No Anthropic
+                           dependency.
 data/
   reference.js             Fixed, pre-verified content: sectors (with
-                           each one's stakes headline reason), the six
-                           interventions, the ten assessment questions,
-                           the scoring rule and per-question
-                           recommendation text, the Article 22 caveat,
+                           each one's stakes headline reason), the ten
+                           assessment questions and their per-question
+                           recommendation text and citations, the fixed
+                           "all met" message, the Article 22 caveat,
                            the customer notice, and the disclaimer.
   fallback-guides.js        Hand-authored stakesExplanation/sectorRisks
                            per sector (English, all six sectors), the
@@ -235,17 +226,17 @@ package.json
 
 Clean and editorial rather than generic SaaS: off-white background
 (`#F4F3F1`), near-black text, a single accent (`#E8471F`) used only for the
-eyebrow label, CTAs, and citation/flag badges, never as a background
-colour. Fraunces (serif) for headlines, Inter for body text (including the
-landing page subheading, kept deliberately small and light so it doesn't
-compete with the headline), IBM Plex Mono reserved for legal citations and
-small structural labels specifically, so a citation visually reads as "a
+eyebrow label, CTAs, and citation badges, never as a background colour.
+Fraunces (serif) for headlines, Inter for body text (including the landing
+page subheading, kept deliberately small and light so it doesn't compete
+with the headline), IBM Plex Mono reserved for legal citations and small
+structural labels specifically, so a citation visually reads as "a
 precise, checkable fact" rather than prose, wherever it appears. The
 sector picker is a card grid, not a dropdown, so all six options are
-visible at once (the stakes tier is deliberately not shown until a guide is
-generated). Visible keyboard focus states throughout; transitions are short
-and understated (view changes, button and card hover), all disabled under
-`prefers-reduced-motion`.
+visible at once (the stakes tier is deliberately not shown until a report
+is generated). Visible keyboard focus states throughout; transitions are
+short and understated (view changes, button and card hover), all disabled
+under `prefers-reduced-motion`.
 
 ## Running locally
 
@@ -318,10 +309,11 @@ forcing the Anthropic call to throw) and confirming that:
 2. The response has `isFallback: true` and a `fallbackNote` explaining
    what happened.
 3. The frontend renders the amber "Showing a cached version" banner and a
-   complete, correctly-structured guide underneath it: same six
-   interventions, same citations, same flag logic, same Article 22 caveat
-   and customer notice, sourced from `data/reference.js` and
-   `data/fallback-guides.js` instead of the live model.
+   complete, correctly-structured stakes page underneath it: same
+   assessment questions, same Article 22 caveat, sourced from
+   `data/reference.js` and `data/fallback-guides.js` instead of the live
+   model. The recommendation list itself is unaffected either way, since
+   it's produced by stage 2, which never depends on Anthropic.
 
 The quickest way to reproduce this locally: unset `ANTHROPIC_API_KEY` (or
 just don't set it) and request any guide. The function's own key check
@@ -348,11 +340,17 @@ whether or not `ANTHROPIC_API_KEY` is set at all.
   certification of compliance**: every guide says so explicitly, in the
   `disclaimer` field.
 - **The ten-question assessment is required, not optional.** There is no
-  path from the stakes screen to the six-point guide that skips it: the
-  frontend disables "Generate your report" until all ten questions are
-  answered, and `api/score-assessment.js` independently rejects an
-  incomplete set of answers with a 400, so the requirement holds even if
-  the frontend check were somehow bypassed.
+  path from the stakes screen to the report that skips it: the frontend
+  disables "Generate your report" until all ten questions are answered,
+  and `api/score-assessment.js` independently rejects an incomplete set
+  of answers with a 400, so the requirement holds even if the frontend
+  check were somehow bypassed.
+- **The report is flat and answer-specific, not a fixed six-item
+  checklist.** A question answered "yes" produces no output at all;
+  there's nothing to confirm it was checked beyond its absence from the
+  report. Answering "yes" to everything doesn't yield an empty report,
+  though: `ALL_MET_MESSAGE`, a single fixed confirmation line, is shown
+  instead of an empty recommendation list.
 - **Picking a sector goes straight to the stakes page.** There is no
   separate "generate" click between the picker and the stakes screen;
   `api/generate-guide.js` (stage 1) fires automatically as soon as a
