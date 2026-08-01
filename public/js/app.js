@@ -367,32 +367,13 @@
     y += 6;
     addDivider();
 
-    // Stakes summary
-    addText(guide.stakesHeadline, { font: "times", style: "bold", size: 13, lineHeight: 17 });
-    y += 4;
-    addText(guide.stakesExplanation, { color: PDF_COLORS.inkSoft });
-    y += 6;
-
-    if (guide.sectorRisks && guide.sectorRisks.length) {
-      addText("Risks worth watching for", { style: "bold", size: 11 });
-      y += 2;
-      guide.sectorRisks.forEach((risk) => {
-        addText(`•  ${risk}`, { size: 10, color: PDF_COLORS.inkSoft });
-      });
-      y += 4;
-    }
-
-    if (guide.article22Caveat) {
-      addText(`${guide.article22Caveat.text} (${guide.article22Caveat.citation})`, {
-        style: "italic",
-        size: 9,
-        color: PDF_COLORS.inkSoft,
-      });
-    }
-    y += 8;
-    addDivider();
-
-    // Recommendations, clearly separated per item rather than run together
+    // The report is the assessment's output, not a stakes-page recap:
+    // sector risks and the stakes explanation belong only on the stakes
+    // screen the SME already saw before answering the ten questions.
+    // Repeating them here padded the PDF past one page for no reason
+    // and duplicated content that isn't specific to this SME's answers.
+    //
+    // Recommendations, clearly separated per item rather than run together.
     addText("Recommendations based on your answers", {
       font: "times",
       style: "bold",
