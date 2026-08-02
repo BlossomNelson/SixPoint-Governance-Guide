@@ -212,7 +212,7 @@ module.exports = async (req, res) => {
       ...stakesContent,
       isFallback: true,
       fallbackNote:
-        "We couldn't reach the live guide generator, so you're seeing a pre-verified cached version. Everything below has been checked against the same sources as the live guide.",
+        "We couldn't reach the live generator, so you're seeing a pre-verified cached version. Everything below has been checked against the same sources as the live version.",
     });
   }
 };

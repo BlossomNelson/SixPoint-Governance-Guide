@@ -110,7 +110,7 @@
       // own fallback logic already returns 200 with isFallback: true:
       // this branch is the outer, last-resort safety net.
       document.getElementById("error-message").textContent =
-        "We couldn't generate your guide right now (" + err.message + "). Please try again.";
+        "We couldn't load your stakes summary right now (" + err.message + "). Please try again.";
       showView("error");
     }
   }
